@@ -94,13 +94,19 @@ python -m venv venv
 # - Trên Windows (PowerShell):
 .\venv\Scripts\Activate.ps1
 # - Trên Linux / macOS:
-# source venv/bin/activate
+source venv/bin/activate
 
-# 3. Cài đặt các gói phụ thuộc
+# 3. Cài đặt PyTorch phù hợp với phần cứng máy:
+# - Nếu chạy trên CPU:
+pip install torch
+# - Nếu chạy trên GPU NVIDIA: Cài đặt bản PyTorch CUDA tương ứng với phiên bản CUDA của máy
+#   (Tham khảo lệnh chuẩn xác tại https://pytorch.org/get-started/locally/)
+#   Ví dụ cho CUDA 12.6: pip install torch --index-url https://download.pytorch.org/whl/cu126
+#   Ví dụ cho CUDA 12.4: pip install torch --index-url https://download.pytorch.org/whl/cu124
+#   Ví dụ cho CUDA 11.8: pip install torch --index-url https://download.pytorch.org/whl/cu118
+
+# 4. Cài đặt các gói phụ thuộc còn lại
 pip install -r requirements.txt
-
-# (Lưu ý: Nếu máy có card đồ họa NVIDIA, nên cài PyTorch CUDA để tăng tốc:
-#  pip install torch --index-url https://download.pytorch.org/whl/cu126)
 ```
 
 ### 3.2. Sinh Dữ liệu Giả lập (Synthetic Raw Data) & Chạy Pipeline Steps 1–3
