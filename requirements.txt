@@ -7,3 +7,6 @@ pandas
 openpyxl
 pyyaml
 tqdm
+torch
+monai
+einops
