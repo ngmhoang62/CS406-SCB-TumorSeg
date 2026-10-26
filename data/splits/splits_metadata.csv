@@ -1,0 +1,33 @@
+patient_id,dataset,tumor_subtype,subtype_id,split,sample_weight,view,pixel_spacing,slice_thickness,manufacturer,field_strength
+DUKE_002,DUKE,Luminal,0,train,1.0,axial,"[0.85, 0.85]",1.25,GE,1.5
+DUKE_006,DUKE,Luminal,0,train,1.0,sagittal,"[0.85, 0.85]",1.25,GE,1.5
+DUKE_010,DUKE,Triple Negative,1,train,1.0,axial,"[0.85, 0.85]",1.25,GE,1.5
+DUKE_014,DUKE,Triple Negative,1,train,1.0,axial,"[0.85, 0.85]",1.25,GE,1.5
+DUKE_018,DUKE,HER2-enriched,2,train,1.0,axial,"[0.85, 0.85]",1.25,GE,1.5
+DUKE_022,DUKE,HER2-enriched,2,train,1.0,axial,"[0.85, 0.85]",1.25,GE,1.5
+DUKE_026,DUKE,HER2-pure,3,train,1.0,sagittal,"[0.85, 0.85]",1.25,GE,1.5
+DUKE_030,DUKE,HER2-pure,3,train,1.0,axial,"[0.85, 0.85]",1.25,GE,1.5
+ISPY1_003,ISPY1,Luminal,0,val,1.0,axial,"[0.9, 0.9]",1.2,SIEMENS,3.0
+ISPY1_007,ISPY1,Luminal,0,test,1.0,axial,"[0.9, 0.9]",1.2,SIEMENS,3.0
+ISPY1_011,ISPY1,Triple Negative,1,val,1.0,sagittal,"[0.9, 0.9]",1.2,SIEMENS,3.0
+ISPY1_015,ISPY1,Triple Negative,1,test,1.0,axial,"[0.9, 0.9]",1.2,SIEMENS,3.0
+ISPY1_019,ISPY1,HER2-enriched,2,train,1.0,axial,"[0.9, 0.9]",1.2,SIEMENS,3.0
+ISPY1_023,ISPY1,HER2-enriched,2,test,1.0,axial,"[0.9, 0.9]",1.2,SIEMENS,3.0
+ISPY1_027,ISPY1,HER2-pure,3,train,1.0,axial,"[0.9, 0.9]",1.2,SIEMENS,3.0
+ISPY1_031,ISPY1,HER2-pure,3,test,1.0,sagittal,"[0.9, 0.9]",1.2,SIEMENS,3.0
+ISPY2_001,ISPY2,Luminal,0,train,1.0,sagittal,"[1.0, 1.0]",1.0,SIEMENS,3.0
+ISPY2_005,ISPY2,Luminal,0,train,1.0,axial,"[1.0, 1.0]",1.0,SIEMENS,3.0
+ISPY2_009,ISPY2,Triple Negative,1,train,1.0,axial,"[1.0, 1.0]",1.0,SIEMENS,3.0
+ISPY2_013,ISPY2,Triple Negative,1,train,1.0,axial,"[1.0, 1.0]",1.0,SIEMENS,3.0
+ISPY2_017,ISPY2,HER2-enriched,2,train,1.0,axial,"[1.0, 1.0]",1.0,SIEMENS,3.0
+ISPY2_021,ISPY2,HER2-enriched,2,train,1.0,sagittal,"[1.0, 1.0]",1.0,SIEMENS,3.0
+ISPY2_025,ISPY2,HER2-pure,3,train,1.0,axial,"[1.0, 1.0]",1.0,SIEMENS,3.0
+ISPY2_029,ISPY2,HER2-pure,3,val,1.0,axial,"[1.0, 1.0]",1.0,SIEMENS,3.0
+NACT_004,NACT,Luminal,0,train,1.0,axial,"[1.1, 1.1]",1.0,GE,1.5
+NACT_008,NACT,Luminal,0,test,1.0,axial,"[1.1, 1.1]",1.0,GE,1.5
+NACT_012,NACT,Triple Negative,1,train,1.0,axial,"[1.1, 1.1]",1.0,GE,1.5
+NACT_016,NACT,Triple Negative,1,test,1.0,sagittal,"[1.1, 1.1]",1.0,GE,1.5
+NACT_020,NACT,HER2-enriched,2,val,1.0,axial,"[1.1, 1.1]",1.0,GE,1.5
+NACT_024,NACT,HER2-enriched,2,test,1.0,axial,"[1.1, 1.1]",1.0,GE,1.5
+NACT_028,NACT,HER2-pure,3,train,1.0,axial,"[1.1, 1.1]",1.0,GE,1.5
+NACT_032,NACT,HER2-pure,3,test,1.0,axial,"[1.1, 1.1]",1.0,GE,1.5
