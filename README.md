@@ -53,24 +53,26 @@ Project/
 
 ## 2. Quy ước "Data Contract" giữa Nhóm A và Nhóm B
 
-Khi Nhóm A hoàn tất tiền xử lý trên dữ liệu thực tế (1,480 ca), chỉ cần ghi đè vào `data/processed/npz_96x96x96/{CASE_ID}.npz` và `data/splits/splits_metadata.csv` theo đúng chuẩn dưới đây:
+> **Lưu ý quan trọng cho Nhóm A:** Toàn bộ chi tiết kỹ thuật và công thức toán học của **Step 1, Step 2, Step 3** (chuẩn hóa trục **RAS**, nội suy đẳng hướng $1\times 1\times 1\text{ mm}^3$ dùng `B-Spline` cho MRI và `Nearest-Neighbor` cho Mask, trích xuất VOI $+25\%$ lề, lọc nhiễu giữ biên 3D, cắt phân vị $[0.5\%, 99.5\%]$ trên vùng $>0$, và công thức tính 3 kênh) bắt buộc phải tuân thủ đúng mục **STEP 1, STEP 2, STEP 3** trong [`docs/detailed_pipeline.md`](docs/detailed_pipeline.md) (hoặc chạy trực tiếp script [`scripts/run_step1_2_3_pipeline.py`](scripts/run_step1_2_3_pipeline.py)).
+
+Khi hoàn tất tiền xử lý trên 1,480 ca thực tế, dữ liệu đầu ra tại `data/processed/npz_96x96x96/{CASE_ID}.npz` và `data/splits/splits_metadata.csv` phải thỏa mãn đặc tả dưới đây:
 
 ### 2.1. Định dạng file `data/processed/npz_96x96x96/{CASE_ID}.npz`
-Mỗi file `.npz` nén chứa 4 keys:
-* **`image`**: `np.ndarray`, shape `(3, 96, 96, 96)`, `dtype=float16`
-  * Kênh `0` ($C_1$): $\hat{I}_{\text{post1}}$ — Ảnh pha sau tiêm thứ nhất chuẩn hóa Z-score.
+Mỗi file `.npz` nén (`np.savez_compressed`) chứa đúng 4 keys theo thứ tự chiều không gian `(C, D, H, W)` = `(C, Z, Y, X)`:
+* **`image`**: `np.ndarray`, shape `(3, D, H, W)`, `dtype=float16` (với $D, H, W \ge 96$: bằng `(3, 96, 96, 96)` nếu VOI $+25\%$ lề $\le 96^3$; giữ nguyên kích thước VOI thực $\ge 96$ ở trục vượt quá $96$ để không cắt mất voxel nào của u và phục vụ Sliding Window $96^3$ ở Step 6):
+  * Kênh `0` ($C_1$): $\hat{I}_{\text{post1}}$ — Ảnh pha sau tiêm thứ nhất (`_0001`) chuẩn hóa Z-score.
   * Kênh `1` ($C_2$): $\hat{I}_{\text{sub}} = \text{Z-score}(\max(0, I_{\text{post1}} - I_{\text{pre}}))$ — Ảnh trừ số học triệt tiêu nền mô mỡ.
   * Kênh `2` ($C_3$): $\hat{I}_{\text{PE+CLAHE}}$ — Bản đồ tỷ lệ tăng cường tín hiệu kết hợp cân bằng histogram cục bộ 3D CLAHE chuẩn hóa Z-score.
-* **`mask`**: `np.ndarray`, shape `(1, 96, 96, 96)`, `dtype=uint8` — Nhãn chuyên gia (`0` hoặc `1`).
-* **`auto_mask`**: `np.ndarray`, shape `(1, 96, 96, 96)`, `dtype=uint8` — Nhãn tự động sơ bộ phục vụ đánh giá Baseline `B0.2`.
-* **`subtype_id`**: `np.int64` scalar — Mã số phân nhóm bệnh học:
-  * `0`: `Luminal` (`luminal`, `luminal_a`, `luminal_b`)
+* **`mask`**: `np.ndarray`, shape `(1, D, H, W)`, `dtype=uint8` — Nhãn chuyên gia nhị phân $\in \{0, 1\}$ (khớp kích thước không gian với `image`).
+* **`auto_mask`**: `np.ndarray`, shape `(1, D, H, W)`, `dtype=uint8` — Nhãn tự động sơ bộ nhị phân $\in \{0, 1\}$ phục vụ đánh giá Baseline `B0.2`.
+* **`subtype_id`**: `np.int64` scalar — Mã số phân nhóm bệnh học (sau khi đã loại bỏ 26 ca `N/A`):
+  * `0`: `Luminal` (gộp từ `luminal`, `luminal_a`, `luminal_b`)
   * `1`: `Triple Negative` (`triple_negative`)
   * `2`: `HER2-enriched` (`her2_enriched`)
   * `3`: `HER2-pure` (`her2_pure`)
 
 ### 2.2. Định dạng bảng `data/splits/splits_metadata.csv`
-Chứa các cột bắt buộc: `patient_id, dataset, tumor_subtype, subtype_id, split, sample_weight` (trong đó `split` $\in \{\text{train}, \text{val}, \text{test}\}$).
+Chứa danh sách các ca hợp lệ kèm các cột bắt buộc: `patient_id, dataset, tumor_subtype, subtype_id, split, sample_weight` (trong đó `split` $\in \{\text{train}, \text{val}, \text{test}\}$ giữ nguyên tập `test` gốc từ `train_test_splits.csv` của bài báo và chia Stratified 85% `train` / 15% `val` theo `(tumor_subtype, dataset)`).
 
 ---
 

@@ -82,10 +82,11 @@ def extract_centered_voi_96(
     pad_mode: str = "constant",
 ) -> Tuple[List[np.ndarray], np.ndarray, Dict[str, Any]]:
     """
-    Extract high-resolution 96x96x96 3D VOI centered on the tumor bounding box (+25% margin).
-    Preserves true 1.0 mm^3 isotropic geometry without rescaling distortion:
-      - If the volume/VOI is smaller than 96^3 along any axis, applies symmetric padding.
-      - Centers the 96x96x96 window at the tumor centroid.
+    Extract high-resolution 3D VOI centered on the tumor bounding box (+25% margin).
+    Preserves true 1.0 mm^3 isotropic geometry without rescaling distortion (Step 2.2):
+      - If VOI (+25% margin) <= 96 along an axis: extracts 96 voxels (with symmetric padding if needed).
+      - If VOI (+25% margin) > 96 along an axis: retains the full VOI extent (>= 96) along that axis
+        so no tumor voxel is ever truncated (handled by random 96^3 crop in Train & Sliding Window in Test).
     """
     bbox_z, bbox_y, bbox_x = compute_tumor_bbox_with_margin(mask_zyx, margin_ratio=margin_ratio)
 
@@ -93,7 +94,15 @@ def extract_centered_voi_96(
     cy = (bbox_y[0] + bbox_y[1]) // 2
     cx = (bbox_x[0] + bbox_x[1]) // 2
 
-    td, th, tw = target_size
+    span_z = bbox_z[1] - bbox_z[0]
+    span_y = bbox_y[1] - bbox_y[0]
+    span_x = bbox_x[1] - bbox_x[0]
+
+    td = max(target_size[0], span_z)
+    th = max(target_size[1], span_y)
+    tw = max(target_size[2], span_x)
+    expected_shape = (td, th, tw)
+
     d, h, w = mask_zyx.shape
 
     # Desired window in original volume coordinates: [start, end)
@@ -120,18 +129,19 @@ def extract_centered_voi_96(
         if needs_padding:
             mode = pad_mode if (pad_mode == "reflect" and min(sub_vol.shape) > 1) else "constant"
             sub_vol = np.pad(sub_vol, pad_width=pad_width, mode=mode)
-        assert sub_vol.shape == target_size, f"Expected {target_size}, got {sub_vol.shape}"
+        assert sub_vol.shape == expected_shape, f"Expected {expected_shape}, got {sub_vol.shape}"
         cropped_volumes.append(sub_vol)
 
     sub_mask = mask_zyx[sz0:sz1, sy0:sy1, sx0:sx1]
     if needs_padding:
         # Binary mask is always zero-padded outside image bounds
         sub_mask = np.pad(sub_mask, pad_width=pad_width, mode="constant", constant_values=0)
-    assert sub_mask.shape == target_size, f"Expected {target_size}, got {sub_mask.shape}"
+    assert sub_mask.shape == expected_shape, f"Expected {expected_shape}, got {sub_mask.shape}"
 
     voi_info = {
         "center_zyx": (int(cz), int(cy), int(cx)),
         "bbox_with_margin_zyx": (bbox_z, bbox_y, bbox_x),
+        "voi_shape_zyx": expected_shape,
         "padded_voxels": pad_width,
         "resampled_shape_zyx": (int(d), int(h), int(w)),
     }
