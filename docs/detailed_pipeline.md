@@ -1,6 +1,6 @@
 # CHI TIẾT PIPELINE KỸ THUẬT & THIẾT KẾ THỰC NGHIỆM TOÀN DIỆN (DETAILED PIPELINE)
 
-> **Đề tài:** SubAdapt-Net — Phân đoạn khối u vú trên ảnh 3D DCE-MRI thích ứng theo phân nhóm bệnh học  
+> **Đề tài:** SCB-TumorSeg: Subtype-Conditioned 3D Breast Tumor Segmentation Using DCE-MRI *(Phân đoạn khối u vú 3D có điều kiện hóa theo phân nhóm bệnh học sử dụng ảnh DCE-MRI)*  
 > **Môn học:** Xử lý ảnh và Ứng dụng (CS406)  
 > **Bài báo gốc & Dataset:** *A large-scale multicenter breast cancer DCE-MRI benchmark dataset with expert segmentations* (MAMA-MIA, *Nature Scientific Data*, 2025)  
 > **Hạ tầng tính toán:** Google Colab Pro+ — GPU NVIDIA A100 (80GB VRAM, 83GB System RAM), ngân sách **400 Compute Units**  

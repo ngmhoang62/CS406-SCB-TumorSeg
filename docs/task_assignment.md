@@ -1,6 +1,6 @@
 # KẾ HOẠCH PHÂN CÔNG CÔNG VIỆC NHÓM 4 NGƯỜI (TASK ASSIGNMENT & TIMELINE)
 
-> **Đề tài:** SubAdapt-Net — Phân đoạn khối u vú trên ảnh 3D DCE-MRI thích ứng theo phân nhóm bệnh học  
+> **Đề tài:** SCB-TumorSeg: Subtype-Conditioned 3D Breast Tumor Segmentation Using DCE-MRI *(Phân đoạn khối u vú 3D có điều kiện hóa theo phân nhóm bệnh học sử dụng ảnh DCE-MRI)*  
 > **Môn học:** Xử lý ảnh và Ứng dụng (CS406)  
 > **Quy mô nhân sự:** 4 thành viên — Chia làm **2 Nhóm nhỏ (Sub-team A & Sub-team B)**, mỗi nhóm 2 người  
 > **Thời gian thực hiện:** **4 Tuần (1 Tháng)**  
