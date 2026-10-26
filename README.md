@@ -36,7 +36,8 @@ Project/
 │   └── tables/                       # Bảng tổng hợp 39 cấu hình & phân tích theo từng Subtype
 ├── scripts/
 │   ├── generate_synthetic_raw.py     # Sinh dữ liệu thô giả lập chuẩn định dạng MAMA-MIA (32 ca + 2 ca N/A)
-│   └── run_step1_2_3_pipeline.py     # Chạy thực thi toàn bộ Step 1 -> Step 2 -> Step 3
+│   ├── run_step1_2_3_pipeline.py     # Chạy thực thi toàn bộ Step 1 -> Step 2 -> Step 3
+│   └── verify_models_step4_5.py      # Bộ kiểm thử xác minh Step 4, 5 & Smoke test 2-epoch trên GPU/CPU
 └── src/
     ├── preprocessing/                # Step 1, 2, 3 (Ingestion, 3D VOI 96^3, Denoising & 3-Channel Synthesis)
     ├── datasets/                     # Step 3.3 & Step 6 (Dataset, DataLoader, 3D On-the-fly Augmentation)
@@ -76,12 +77,45 @@ Chứa danh sách các ca hợp lệ kèm các cột bắt buộc: `patient_id, 
 
 ---
 
-## 3. Hướng dẫn Chạy Tạo Synthetic Data & Pipeline Steps 1–3
+## 3. Hướng dẫn Tái lập Dự án & Chạy Kiểm thử (Quick Start cho Thành viên)
 
-```powershell
-# 1. Sinh dữ liệu thô giả lập (32 ca hợp lệ + 2 ca N/A) vào data/raw/
-.\venv\Scripts\python.exe scripts/generate_synthetic_raw.py
+Dưới đây là chu trình đầy đủ để một thành viên mới (ví dụ TV4) clone repository về máy, dựng môi trường, tạo dữ liệu giả lập chuẩn hóa và kiểm thử toàn bộ mô hình:
 
-# 2. Chạy toàn bộ pipeline Step 1 -> Step 2 -> Step 3 để xuất .npz và splits_metadata.csv
-.\venv\Scripts\python.exe scripts/run_step1_2_3_pipeline.py
+### 3.1. Clone Repository & Cài đặt Môi trường
+```bash
+# 1. Clone repository về máy
+git clone https://github.com/ngmhoang62/CS406-SCB-TumorSeg.git
+cd CS406-SCB-TumorSeg
+
+# 2. Khởi tạo môi trường ảo Python (khuyến nghị Python 3.10 - 3.12)
+python -m venv venv
+
+# Kích hoạt môi trường:
+# - Trên Windows (PowerShell):
+.\venv\Scripts\Activate.ps1
+# - Trên Linux / macOS:
+# source venv/bin/activate
+
+# 3. Cài đặt các gói phụ thuộc
+pip install -r requirements.txt
+
+# (Lưu ý: Nếu máy có card đồ họa NVIDIA, nên cài PyTorch CUDA để tăng tốc:
+#  pip install torch --index-url https://download.pytorch.org/whl/cu126)
+```
+
+### 3.2. Sinh Dữ liệu Giả lập (Synthetic Raw Data) & Chạy Pipeline Steps 1–3
+```bash
+# 1. Sinh 32 ca giả lập chuẩn MAMA-MIA + 2 ca N/A vào data/raw/
+python scripts/generate_synthetic_raw.py
+
+# 2. Thực thi toàn bộ pipeline Step 1 -> Step 2 -> Step 3
+# Xuất 32 file .npz vào data/processed/npz_96x96x96/ và tạo data/splits/splits_metadata.csv
+python scripts/run_step1_2_3_pipeline.py
+```
+
+### 3.3. Kiểm thử Kiến trúc Mô hình & Chạy Smoke Test (Steps 4 & 5)
+```bash
+# Chạy bộ kiểm thử xác minh Zero-Init của FiLM, Gradient Flow, Deep Supervision,
+# và thực hiện Smoke Test 2 epochs huấn luyện thực tế trên GPU/CPU cho cả 3 mô hình (M1, M2, M3)
+python scripts/verify_models_step4_5.py
 ```
