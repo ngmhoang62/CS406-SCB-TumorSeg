@@ -8,6 +8,32 @@ __pycache__/
 *.py[cod]
 *$py.class
 .ipynb_checkpoints/
+.pytest_cache/
+
+# Binary 3D Volumes & Preprocessed NPZ (Keep folder structure via .gitkeep, track light CSV/XLSX tables)
+data/raw/images/*
+!data/raw/images/.gitkeep
+data/raw/segmentations/expert/*
+!data/raw/segmentations/expert/.gitkeep
+data/raw/segmentations/automatic/*
+!data/raw/segmentations/automatic/.gitkeep
+data/processed/npz_96x96x96/*
+!data/processed/npz_96x96x96/.gitkeep
+
+# Outputs & Checkpoints
+outputs/checkpoints/*
+!outputs/checkpoints/.gitkeep
+outputs/logs/*
+!outputs/logs/.gitkeep
+outputs/predictions/*
+!outputs/predictions/.gitkeep
+outputs/figures/*
+!outputs/figures/.gitkeep
+outputs/tables/*
+!outputs/tables/.gitkeep
+
+# Reference Cloned Repo
+MAMA-MIA/
 
 # IDE & OS files
 .vscode/
