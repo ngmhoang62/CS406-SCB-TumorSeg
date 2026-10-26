@@ -101,9 +101,6 @@ source venv/bin/activate
 pip install torch
 # - Nếu chạy trên GPU NVIDIA: Cài đặt bản PyTorch CUDA tương ứng với phiên bản CUDA của máy
 #   (Tham khảo lệnh chuẩn xác tại https://pytorch.org/get-started/locally/)
-#   Ví dụ cho CUDA 12.6: pip install torch --index-url https://download.pytorch.org/whl/cu126
-#   Ví dụ cho CUDA 12.4: pip install torch --index-url https://download.pytorch.org/whl/cu124
-#   Ví dụ cho CUDA 11.8: pip install torch --index-url https://download.pytorch.org/whl/cu118
 
 # 4. Cài đặt các gói phụ thuộc còn lại
 pip install -r requirements.txt
