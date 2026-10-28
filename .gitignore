@@ -22,10 +22,11 @@ data/raw/patient_info_files/*
 data/processed/npz_96x96x96/*
 !data/processed/npz_96x96x96/.gitkeep
 
-# Archives
+# Archives & Temporary Sessions
 *.zip
 *.tar.gz
 *.tar
+scripts/.upload_session.json
 
 # Outputs & Checkpoints
 outputs/checkpoints/*
