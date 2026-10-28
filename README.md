@@ -11,7 +11,7 @@
 ## 1. Cấu trúc Cây thư mục (Modular ML Project Structure)
 
 ```text
-Project/
+SCB-TumorSeg/
 ├── configs/
 │   └── default_config.yaml           # Cấu hình tổng thể cho toàn bộ 8 Steps
 ├── data/
@@ -31,7 +31,7 @@ Project/
 ├── docs/                             # Tài liệu thiết kế pipeline, phân công & bài báo gốc
 ├── notebooks/                        # Jupyter Notebooks phục vụ trực quan hóa & demo báo cáo
 ├── outputs/
-│   ├── checkpoints/                  # Trọng số tốt nhất của 18 runs huấn luyện
+│   ├── checkpoints/                  # Trọng số tốt nhất của các runs huấn luyện & nnunet_pretrained/ (B0.2)
 │   ├── logs/                         # Log huấn luyện (Loss, Validation Dice)
 │   ├── predictions/                  # Mặt nạ dự đoán 3D (P0 & P1)
 │   ├── figures/                      # Hình ảnh lát cắt 2D/3D & biểu đồ so sánh
@@ -108,15 +108,22 @@ pip install torch
 pip install -r requirements.txt
 ```
 
-### 3.2. Sinh Dữ liệu Giả lập (Synthetic Raw Data) & Chạy Pipeline Steps 1–3
-```bash
-# 1. Sinh 32 ca giả lập chuẩn MAMA-MIA + 2 ca N/A vào data/raw/
-python scripts/generate_synthetic_raw.py
+### 3.2. Tiền xử lý Dữ liệu & Chạy Pipeline Steps 1–3
 
-# 2. Thực thi toàn bộ pipeline Step 1 -> Step 2 -> Step 3
-# Xuất 32 file .npz vào data/processed/npz_96x96x96/ và tạo data/splits/splits_metadata.csv
-python scripts/run_step1_2_3_pipeline.py
-```
+* **Trường hợp A: Sử dụng Dữ liệu thật MAMA-MIA (1,506 ca trong `data/raw/`):**
+  ```bash
+  # Chạy trực tiếp pipeline tiền xử lý 1,480 ca hợp lệ ra file .npz và splits_metadata.csv
+  python scripts/run_step1_2_3_pipeline.py
+  ```
+
+* **Trường hợp B: Sử dụng Dữ liệu Giả lập (Synthetic Raw Data - phục vụ kiểm thử nhanh):**
+  ```bash
+  # 1. Sinh 32 ca giả lập chuẩn MAMA-MIA + 2 ca N/A vào data/raw/
+  python scripts/generate_synthetic_raw.py
+
+  # 2. Chạy pipeline tiền xử lý trên 32 ca giả lập
+  python scripts/run_step1_2_3_pipeline.py
+  ```
 
 ### 3.3. Kiểm thử Kiến trúc Mô hình & Chạy Smoke Test (Steps 4 & 5)
 ```bash
