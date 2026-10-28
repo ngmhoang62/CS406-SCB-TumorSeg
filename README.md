@@ -112,7 +112,8 @@ pip install -r requirements.txt
 
 * **Cách 1: Tải trọn bộ dữ liệu thô đóng gói sẵn từ Google Drive (Khuyên dùng cho Thành viên Nhóm):**
   * Toàn bộ 1,506 ca bệnh và metadata thô đã được đóng gói sẵn thành file `mama_mia_raw.zip` (~87.8 GB).
-  * **Link Google Drive:** [Thư mục CS406-IPA (Quyền truy cập: Editor)](https://drive.google.com/drive/folders/1_R2FBnFZf3N0kXWirW1S9bpbid-Jt14M?usp=sharing)
+  * **Link tải trực tiếp:** [Tải mama_mia_raw.zip (Google Drive)](https://drive.google.com/file/d/1fvhFojPeb1lm6tvi1hJHUSFyHR4qpsqz/view?usp=sharing)
+  * **Thư mục tổng:** [Thư mục Google Drive CS406-IPA (Quyền truy cập: Editor)](https://drive.google.com/drive/folders/1_R2FBnFZf3N0kXWirW1S9bpbid-Jt14M?usp=sharing)
   * **Cách sử dụng:**
     1. Tải file `mama_mia_raw.zip` về và đặt trực tiếp tại thư mục gốc của dự án (`SCB-TumorSeg/`).
     2. Click chuột phải chọn **Extract Here** (hoặc dùng lệnh `tar -xf mama_mia_raw.zip` trong terminal).
