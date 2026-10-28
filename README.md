@@ -15,13 +15,15 @@ Project/
 ├── configs/
 │   └── default_config.yaml           # Cấu hình tổng thể cho toàn bộ 8 Steps
 ├── data/
-│   ├── raw/                          # Dữ liệu gốc MAMA-MIA (hoặc Synthetic Raw .nii.gz, .xlsx, .csv)
+│   ├── raw/                          # Dữ liệu gốc MAMA-MIA (1,506 ca DCE-MRI, .xlsx, .csv)
 │   │   ├── images/                   # {CASE_ID}/{CASE_ID}_0000.nii.gz (Pre), _0001.nii.gz (Post1)
 │   │   ├── segmentations/
 │   │   │   ├── expert/               # {CASE_ID}.nii.gz (Nhãn chuyên gia Ground Truth)
 │   │   │   └── automatic/            # {CASE_ID}.nii.gz (Nhãn tự động sơ bộ cho Baseline B0.2)
-│   │   ├── clinical_and_imaging_info.xlsx
-│   │   └── train_test_splits.csv
+│   │   ├── patient_info_files/       # Metadata JSON từng ca (tuổi, dòng máy, từ trường 1.5T/3T, pCR)
+│   │   ├── clinical_and_imaging_info.xlsx # Bảng thông tin lâm sàng chuẩn hóa
+│   │   ├── preliminary_automatic_segmentations_quality_scores.csv # Bảng điểm chất lượng mặt nạ sơ bộ
+│   │   └── train_test_splits.csv     # Bảng phân chia Train/Test gốc (1,200 train / 306 test)
 │   ├── processed/
 │   │   └── npz_96x96x96/             # Dữ liệu 3D VOI sau Step 2 & Step 3 ({CASE_ID}.npz)
 │   └── splits/
