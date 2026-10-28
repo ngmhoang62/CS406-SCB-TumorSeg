@@ -108,24 +108,30 @@ pip install torch
 pip install -r requirements.txt
 ```
 
-### 3.2. Tiền xử lý Dữ liệu & Chạy Pipeline Steps 1–3
+### 3.2. Chuẩn bị Dữ liệu Thô (Data Preparation)
 
-* **Trường hợp A: Sử dụng Dữ liệu thật MAMA-MIA (1,506 ca trong `data/raw/`):**
-  ```bash
-  # Chạy trực tiếp pipeline tiền xử lý 1,480 ca hợp lệ ra file .npz và splits_metadata.csv
-  python scripts/run_step1_2_3_pipeline.py
-  ```
+* **Cách 1: Tải trọn bộ dữ liệu thô đóng gói sẵn từ Google Drive (Khuyên dùng cho Thành viên Nhóm):**
+  * Toàn bộ 1,506 ca bệnh và metadata thô đã được đóng gói sẵn thành file `mama_mia_raw.zip` (~87.8 GB).
+  * **Link Google Drive:** [Thư mục CS406-IPA (Quyền truy cập: Editor)](https://drive.google.com/drive/folders/1_R2FBnFZf3N0kXWirW1S9bpbid-Jt14M?usp=sharing)
+  * **Cách sử dụng:**
+    1. Tải file `mama_mia_raw.zip` về và đặt trực tiếp tại thư mục gốc của dự án (`SCB-TumorSeg/`).
+    2. Click chuột phải chọn **Extract Here** (hoặc dùng lệnh `tar -xf mama_mia_raw.zip` trong terminal).
+    3. Dữ liệu sẽ tự động giải nén vào đúng cấu trúc `data/raw/` (gồm `images/`, `segmentations/`, `patient_info_files/`, các file bảng `.xlsx` và `.csv`).
 
-* **Trường hợp B: Sử dụng Dữ liệu Giả lập (Synthetic Raw Data - phục vụ kiểm thử nhanh):**
+* **Cách 2: Sử dụng Dữ liệu Giả lập (Synthetic Raw Data - phục vụ kiểm thử nhanh code):**
   ```bash
-  # 1. Sinh 32 ca giả lập chuẩn MAMA-MIA + 2 ca N/A vào data/raw/
+  # Sinh 32 ca giả lập chuẩn MAMA-MIA + 2 ca N/A vào data/raw/
   python scripts/generate_synthetic_raw.py
-
-  # 2. Chạy pipeline tiền xử lý trên 32 ca giả lập
-  python scripts/run_step1_2_3_pipeline.py
   ```
 
-### 3.3. Kiểm thử Kiến trúc Mô hình & Chạy Smoke Test (Steps 4 & 5)
+### 3.3. Chạy Pipeline Tiền xử lý Steps 1–3
+```bash
+# Thực thi chuẩn hóa RAS, nội suy 1mm³, cắt VOI 96^3 và trích xuất 3 kênh tín hiệu
+# Xuất các file .npz vào data/processed/npz_96x96x96/ và bảng data/splits/splits_metadata.csv
+python scripts/run_step1_2_3_pipeline.py
+```
+
+### 3.4. Kiểm thử Kiến trúc Mô hình & Chạy Smoke Test (Steps 4 & 5)
 ```bash
 # Chạy bộ kiểm thử xác minh Zero-Init của FiLM, Gradient Flow, Deep Supervision,
 # và thực hiện Smoke Test 2 epochs huấn luyện thực tế trên GPU/CPU cho cả 3 mô hình (M1, M2, M3)
