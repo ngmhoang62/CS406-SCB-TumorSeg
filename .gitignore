@@ -26,7 +26,6 @@ data/processed/npz_96x96x96/*
 *.zip
 *.tar.gz
 *.tar
-scripts/.upload_session.json
 
 # Outputs & Checkpoints
 outputs/checkpoints/*
@@ -39,9 +38,6 @@ outputs/figures/*
 !outputs/figures/.gitkeep
 outputs/tables/*
 !outputs/tables/.gitkeep
-
-# Reference Cloned Repo
-MAMA-MIA/
 
 # IDE & OS files
 .vscode/
