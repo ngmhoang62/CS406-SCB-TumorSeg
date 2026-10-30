@@ -1,0 +1,12 @@
+numpy
+scipy
+SimpleITK
+scikit-image
+scikit-learn
+pandas
+openpyxl
+pyyaml
+tqdm
+requests
+matplotlib
+synapseclient
