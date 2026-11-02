@@ -10,6 +10,8 @@ Thư mục này chạy độc lập trên Google Colab, dùng dữ liệu TV1 đ
 MyDrive/CS406-SCB-TumorSeg/TV2_Tuan1/
 ```
 
+Nếu bạn mở thư mục dự án qua liên kết Drive chung trong **Được chia sẻ với tôi**, hãy chọn **Tổ chức → Thêm lối tắt vào Drive** và đặt lối tắt ở **Drive của tôi** với tên `CS406-SCB-TumorSeg`. Colab chỉ tìm thấy dữ liệu theo đường dẫn `MyDrive/CS406-SCB-TumorSeg` sau bước này. Nếu đặt lối tắt ở nơi khác, sửa biến `PROJECT` trong cell đầu của notebook theo đường dẫn thực tế.
+
 Dữ liệu TV1 cần có:
 
 ```text
