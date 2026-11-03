@@ -15,17 +15,19 @@
 ## 1. Cấu trúc Cây thư mục (Modular ML Project Structure)
 
 ```text
-Project/
+SCB-TumorSeg/
 ├── configs/
 │   └── default_config.yaml           # Cấu hình tổng thể cho toàn bộ 8 Steps
 ├── data/
-│   ├── raw/                          # Dữ liệu gốc MAMA-MIA (hoặc Synthetic Raw .nii.gz, .xlsx, .csv)
+│   ├── raw/                          # Dữ liệu gốc MAMA-MIA (1,506 ca DCE-MRI, .xlsx, .csv)
 │   │   ├── images/                   # {CASE_ID}/{CASE_ID}_0000.nii.gz (Pre), _0001.nii.gz (Post1)
 │   │   ├── segmentations/
 │   │   │   ├── expert/               # {CASE_ID}.nii.gz (Nhãn chuyên gia Ground Truth)
 │   │   │   └── automatic/            # {CASE_ID}.nii.gz (Nhãn tự động sơ bộ cho Baseline B0.2)
-│   │   ├── clinical_and_imaging_info.xlsx
-│   │   └── train_test_splits.csv
+│   │   ├── patient_info_files/       # Metadata JSON từng ca (tuổi, dòng máy, từ trường 1.5T/3T, pCR)
+│   │   ├── clinical_and_imaging_info.xlsx # Bảng thông tin lâm sàng chuẩn hóa
+│   │   ├── preliminary_automatic_segmentations_quality_scores.csv # Bảng điểm chất lượng mặt nạ sơ bộ
+│   │   └── train_test_splits.csv     # Bảng phân chia Train/Test gốc (1,200 train / 306 test)
 │   ├── processed/
 │   │   └── npz_96x96x96/             # Dữ liệu 3D VOI sau Step 2 & Step 3 ({CASE_ID}.npz)
 │   └── splits/
@@ -33,7 +35,7 @@ Project/
 ├── docs/                             # Tài liệu thiết kế pipeline, phân công & bài báo gốc
 ├── notebooks/                        # Jupyter Notebooks phục vụ trực quan hóa & demo báo cáo
 ├── outputs/
-│   ├── checkpoints/                  # Trọng số tốt nhất của 18 runs huấn luyện
+│   ├── checkpoints/                  # Trọng số tốt nhất của các runs huấn luyện & nnunet_pretrained/ (B0.2)
 │   ├── logs/                         # Log huấn luyện (Loss, Validation Dice)
 │   ├── predictions/                  # Mặt nạ dự đoán 3D (P0 & P1)
 │   ├── figures/                      # Hình ảnh lát cắt 2D/3D & biểu đồ so sánh
@@ -110,17 +112,31 @@ pip install torch
 pip install -r requirements.txt
 ```
 
-### 3.2. Sinh Dữ liệu Giả lập (Synthetic Raw Data) & Chạy Pipeline Steps 1–3
-```bash
-# 1. Sinh 32 ca giả lập chuẩn MAMA-MIA + 2 ca N/A vào data/raw/
-python scripts/generate_synthetic_raw.py
+### 3.2. Chuẩn bị Dữ liệu Thô (Data Preparation)
 
-# 2. Thực thi toàn bộ pipeline Step 1 -> Step 2 -> Step 3
-# Xuất 32 file .npz vào data/processed/npz_96x96x96/ và tạo data/splits/splits_metadata.csv
+* **Cách 1: Tải trọn bộ dữ liệu thô đóng gói sẵn từ Google Drive (Khuyên dùng cho Thành viên Nhóm):**
+  * Toàn bộ 1,506 ca bệnh và metadata thô đã được đóng gói sẵn thành file `mama_mia_raw.zip` (~87.8 GB).
+  * **Link tải trực tiếp:** [Tải mama_mia_raw.zip (Google Drive)](https://drive.google.com/file/d/1fvhFojPeb1lm6tvi1hJHUSFyHR4qpsqz/view?usp=sharing)
+  * **Thư mục tổng:** [Thư mục Google Drive CS406-IPA (Quyền truy cập: Editor)](https://drive.google.com/drive/folders/1_R2FBnFZf3N0kXWirW1S9bpbid-Jt14M?usp=sharing)
+  * **Cách sử dụng:**
+    1. Tải file `mama_mia_raw.zip` về và đặt trực tiếp tại thư mục gốc của dự án (`SCB-TumorSeg/`).
+    2. Click chuột phải chọn **Extract Here** (hoặc dùng lệnh `tar -xf mama_mia_raw.zip` trong terminal).
+    3. Dữ liệu sẽ tự động giải nén vào đúng cấu trúc `data/raw/` (gồm `images/`, `segmentations/`, `patient_info_files/`, các file bảng `.xlsx` và `.csv`).
+
+* **Cách 2: Sử dụng Dữ liệu Giả lập (Synthetic Raw Data - phục vụ kiểm thử nhanh code):**
+  ```bash
+  # Sinh 32 ca giả lập chuẩn MAMA-MIA + 2 ca N/A vào data/raw/
+  python scripts/generate_synthetic_raw.py
+  ```
+
+### 3.3. Chạy Pipeline Tiền xử lý Steps 1–3
+```bash
+# Thực thi chuẩn hóa RAS, nội suy 1mm³, cắt VOI 96^3 và trích xuất 3 kênh tín hiệu
+# Xuất các file .npz vào data/processed/npz_96x96x96/ và bảng data/splits/splits_metadata.csv
 python scripts/run_step1_2_3_pipeline.py
 ```
 
-### 3.3. Kiểm thử Kiến trúc Mô hình & Chạy Smoke Test (Steps 4 & 5)
+### 3.4. Kiểm thử Kiến trúc Mô hình & Chạy Smoke Test (Steps 4 & 5)
 ```bash
 # Chạy bộ kiểm thử xác minh Zero-Init của FiLM, Gradient Flow, Deep Supervision,
 # và thực hiện Smoke Test 2 epochs huấn luyện thực tế trên GPU/CPU cho cả 3 mô hình (M1, M2, M3)

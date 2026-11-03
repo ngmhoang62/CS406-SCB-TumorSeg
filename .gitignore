@@ -17,8 +17,15 @@ data/raw/segmentations/expert/*
 !data/raw/segmentations/expert/.gitkeep
 data/raw/segmentations/automatic/*
 !data/raw/segmentations/automatic/.gitkeep
+data/raw/patient_info_files/*
+!data/raw/patient_info_files/.gitkeep
 data/processed/npz_96x96x96/*
 !data/processed/npz_96x96x96/.gitkeep
+
+# Archives & Temporary Sessions
+*.zip
+*.tar.gz
+*.tar
 
 # Outputs & Checkpoints
 outputs/checkpoints/*
@@ -31,9 +38,6 @@ outputs/figures/*
 !outputs/figures/.gitkeep
 outputs/tables/*
 !outputs/tables/.gitkeep
-
-# Reference Cloned Repo
-MAMA-MIA/
 
 # TV4 week 1 generated fixtures and smoke-test outputs
 data/synthetic_tv4*/
