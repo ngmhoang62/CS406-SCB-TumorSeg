@@ -1,5 +1,9 @@
 # SCB-TumorSeg: Subtype-Conditioned 3D Breast Tumor Segmentation Using DCE-MRI
 
+> **TV4 — Tuần 1:** [Notebook Training Smoke Test](notebooks/TV4_Week1_Training_SmokeTest.ipynb)
+> và [hướng dẫn chạy](docs/tv4_week1.md): dữ liệu giả riêng, CacheDataset, augmentation,
+> Deep Supervision Dice+BCE, AdamW, warmup–cosine, CPU fp32 / CUDA bf16 AMP.
+
 > **Đề tài:** Phân đoạn khối u vú 3D có điều kiện hóa theo phân nhóm bệnh học sử dụng ảnh DCE-MRI  
 > **Môn học:** Xử lý ảnh và Ứng dụng (CS406)  
 > **Bộ dữ liệu gốc:** MAMA-MIA (*Nature Scientific Data*, 2025 — 1,506 ca DCE-MRI đa trung tâm)  
