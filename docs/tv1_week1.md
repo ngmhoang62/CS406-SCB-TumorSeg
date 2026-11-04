@@ -44,7 +44,7 @@ Các bảng thống kê kiểm định nhỏ nằm tại `data/splits/` (`auto_v
 pip install -r requirements.txt
 
 # A) Tải + xử lý thẳng từ XNAT (cần config trỏ tới thư mục dữ liệu, xem notebooks/colab_download_preprocess.ipynb)
-python scripts/download_process_xnat.py --config configs/real_config.yaml --workers 8
+python scripts/download_process_xnat.py --config configs/default_config.yaml --workers 8
 
 # B) Xử lý ảnh thô đã nằm trên Drive (khuyên dùng khi đã có ổ G:)
 python scripts/preprocess_via_local_copy.py --data-root "G:\My Drive\CS406-SCB-TumorSeg\data_real" --scratch D:\scb_raw --copy-workers 12 --workers 6 --max-inflight 20

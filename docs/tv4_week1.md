@@ -11,7 +11,7 @@ Từ thư mục gốc repo, dùng Python 3.10–3.12:
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python -m pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cpu
-.\.venv\Scripts\python -m pip install -r requirements-tv4.txt
+.\.venv\Scripts\python -m pip install -r requirements.txt
 .\.venv\Scripts\python -m pytest tests/test_tv4_week1.py -q
 .\.venv\Scripts\python scripts/execute_tv4_notebook.py
 ```

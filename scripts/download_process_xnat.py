@@ -9,7 +9,7 @@ Limitations of the XNAT mirror: no train_test_splits.csv and no automatic masks.
 (by tumor_subtype x dataset, seed 42) is generated instead, and auto_mask is stored as zeros.
 
 Usage:
-  python scripts/download_process_xnat.py --config configs/real_config.yaml [--workers 8] [--limit N]
+  python scripts/download_process_xnat.py --config configs/default_config.yaml [--workers 8] [--limit N]
 """
 
 import argparse
@@ -121,7 +121,7 @@ def process_case(args):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--config", default="configs/real_config.yaml")
+    ap.add_argument("--config", default="configs/default_config.yaml")
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--tmp-dir", default=None, help="local scratch dir for raw NIfTI (default: <raw_dir>/tmp)")
