@@ -1,0 +1,13 @@
+patient_id,dataset,tumor_subtype
+DUKE_157,DUKE,Luminal
+ISPY1_1008,ISPY1,Luminal
+ISPY2_783427,ISPY2,Luminal
+NACT_26,NACT,Luminal
+ISPY1_1102,ISPY1,HER2-enriched
+DUKE_873,DUKE,HER2-pure
+DUKE_790,DUKE,Triple Negative
+DUKE_883,DUKE,HER2-enriched
+DUKE_105,DUKE,HER2-pure
+DUKE_618,DUKE,Luminal
+DUKE_778,DUKE,Triple Negative
+ISPY1_1029,ISPY1,HER2-enriched

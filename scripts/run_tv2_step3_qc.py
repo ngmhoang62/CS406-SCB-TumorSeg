@@ -1,4 +1,4 @@
-"""Run TV2 Step 3 on Colab/Drive without repeating TV1 Steps 1–2."""
+"""Run TV2 Step 3 QC and/or 3-channel synthesis without repeating TV1 Steps 1–2."""
 
 from __future__ import annotations
 
@@ -8,14 +8,21 @@ import hashlib
 import json
 import os
 import random
-from collections import Counter
 from pathlib import Path
+import sys
+import traceback
+from collections import Counter
 
 import numpy as np
 
-from src.step3 import synthesize_three_channels
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-HERE = Path(__file__).resolve().parent
+from src.preprocessing.step3_image_proc import synthesize_three_channels
+
+STEP3_SOURCE_FILE = PROJECT_ROOT / "src" / "preprocessing" / "step3_image_proc.py"
+DEFAULT_CONFIG_PATH = PROJECT_ROOT / "configs" / "step3_config.json"
 REQUIRED_KEYS = {"image", "mask", "auto_mask", "subtype_id"}
 VOI_KEYS = {"pre_voi", "post1_voi"}
 
@@ -134,8 +141,10 @@ def qc_dataset(rows: list[dict[str, str]], source_dir: Path, report_dir: Path) -
     write_csv(report_dir / "channel_summary_by_group.csv", grouped)
     counts = Counter(r["status"] for r in records)
     summary = {
-        "source_dir": str(source_dir), "expected": len(rows),
-        "valid": counts["valid"], "missing": counts["missing"],
+        "source_dir": str(source_dir),
+        "expected": len(rows),
+        "valid": counts["valid"],
+        "missing": counts["missing"],
         "invalid": counts["invalid"],
         "auto_mask_empty": sum(r["auto_mask_empty"] == 1 for r in records),
         "oversized_voi": sum(r["oversized"] == 1 for r in records),
@@ -170,11 +179,12 @@ def select_pilot(rows: list[dict[str, str]], size: int) -> list[dict[str, str]]:
         take([r for r in rows if r["dataset"] == dataset and r["tumor_subtype"] == subtype])
     rest = [r for r in rows if r["patient_id"] not in seen]
     rng.shuffle(rest)
-    return chosen + rest[:max(0, size - len(chosen))]
+    return chosen + rest[: max(0, size - len(chosen))]
 
 
 def plot_case(image: np.ndarray, mask: np.ndarray, title: str, path: Path) -> None:
     import matplotlib
+
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
@@ -220,16 +230,19 @@ def pilot(rows, tv1_dir: Path, voi_dir: Path, report_dir: Path, config: dict, re
                 record[f"{name}_mean_abs_diff_vs_tv1"] = float(
                     np.abs(image[i].astype(np.float32) - old[i].astype(np.float32)).mean()
                 )
-        plot_case(image, mask, f"{case_id} | {row['dataset']} | {row['tumor_subtype']}",
-                  report_dir / "figures" / f"{case_id}.png")
+        plot_case(
+            image,
+            mask,
+            f"{case_id} | {row['dataset']} | {row['tumor_subtype']}",
+            report_dir / "figures" / f"{case_id}.png",
+        )
         comparisons.append(record)
     write_csv(report_dir / "pilot_cases.csv", comparisons)
 
 
 def build_dataset(rows, tv1_dir: Path, voi_dir: Path, out_dir: Path, report_dir: Path, config: dict) -> dict:
-    source = HERE / "src" / "step3.py"
     signature = hashlib.sha256(
-        json.dumps(config, sort_keys=True).encode() + source.read_bytes()
+        json.dumps(config, sort_keys=True).encode() + STEP3_SOURCE_FILE.read_bytes()
     ).hexdigest()
     manifest = out_dir / "tv2_build_manifest.json"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -261,13 +274,25 @@ def build_dataset(rows, tv1_dir: Path, voi_dir: Path, out_dir: Path, report_dir:
             if problems:
                 raise ValueError("; ".join(problems))
             with tmp.open("wb") as handle:
-                np.savez_compressed(handle, image=image, mask=mask, auto_mask=auto_mask,
-                                    subtype_id=np.int64(subtype_id))
+                np.savez_compressed(
+                    handle,
+                    image=image,
+                    mask=mask,
+                    auto_mask=auto_mask,
+                    subtype_id=np.int64(subtype_id),
+                )
             os.replace(tmp, out)
             results.append({"patient_id": case_id, "status": "done", "error": ""})
-        except Exception as exc:
-            tmp.unlink(missing_ok=True)
-            results.append({"patient_id": case_id, "status": "failed", "error": f"{type(exc).__name__}: {exc}"})
+        except Exception:
+            detail = traceback.format_exc()
+            print(detail, flush=True)
+            try:
+                tmp.unlink(missing_ok=True)
+            except OSError as cleanup_error:
+                print(f"Could not remove temporary file: {cleanup_error}", flush=True)
+            results.append({"patient_id": case_id, "status": "failed", "error": detail})
+            write_csv(report_dir / "build_cases.csv", results)
+            break
         if index % 25 == 0 or index == len(rows):
             print(f"Processed {index}/{len(rows)}", flush=True)
             write_csv(report_dir / "build_cases.csv", results)
@@ -277,7 +302,9 @@ def build_dataset(rows, tv1_dir: Path, voi_dir: Path, out_dir: Path, report_dir:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--data-root", type=Path, required=True, help="Drive data_real directory")
+    parser.add_argument("--data-root", type=Path, required=True, help="Drive data_real or local data directory")
+    parser.add_argument("--metadata", type=Path, help="Metadata CSV for the selected cases")
+    parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH, help="Step 3 JSON config path")
     parser.add_argument("--mode", choices=("auto", "validate", "recompute"), default="auto")
     parser.add_argument("--voi-dir", type=Path, help="Step 2 VOI NPZ files with pre_voi/post1_voi")
     parser.add_argument("--output-dir", type=Path, help="Versioned TV2 output NPZ directory")
@@ -287,22 +314,29 @@ def main() -> None:
     args = parser.parse_args()
 
     root = args.data_root
-    rows = read_metadata(root / "splits" / "splits_metadata.csv")
+    rows = read_metadata(args.metadata or root / "splits" / "splits_metadata.csv")
     tv1_dir = root / "processed" / "npz_96x96x96"
     voi_dir = args.voi_dir or root / "processed" / "voi_step2"
     out_dir = args.output_dir or root / "processed" / "npz_tv2_step3"
     report_dir = args.report_dir or root / "tv2_step3" / "reports"
-    config = json.loads((HERE / "config.json").read_text(encoding="utf-8"))
+    config = json.loads(args.config.read_text(encoding="utf-8"))
     missing_tv1 = [r["patient_id"] for r in rows if not (tv1_dir / f"{r['patient_id']}.npz").is_file()]
     missing_voi = [r["patient_id"] for r in rows if not (voi_dir / f"{r['patient_id']}.npz").is_file()]
     available_voi = len(rows) - len(missing_voi)
-    inventory = {"expected": len(rows), "missing_tv1": missing_tv1,
-                 "available_voi": available_voi, "missing_voi": missing_voi,
-                 "voi_dir": str(voi_dir)}
+    inventory = {
+        "expected": len(rows),
+        "missing_tv1": missing_tv1,
+        "available_voi": available_voi,
+        "missing_voi": missing_voi,
+        "voi_dir": str(voi_dir),
+    }
     report_dir.mkdir(parents=True, exist_ok=True)
     (report_dir / "inventory.json").write_text(json.dumps(inventory, indent=2), encoding="utf-8")
-    print(f"TV1 NPZ: {len(rows) - len(missing_tv1)}/{len(rows)} | "
-          f"Step 2 VOI: {available_voi}/{len(rows)} | inventory: {report_dir / 'inventory.json'}", flush=True)
+    print(
+        f"TV1 NPZ: {len(rows) - len(missing_tv1)}/{len(rows)} | "
+        f"Step 2 VOI: {available_voi}/{len(rows)} | inventory: {report_dir / 'inventory.json'}",
+        flush=True,
+    )
     if missing_tv1:
         raise SystemExit("TV1 NPZ dataset is incomplete; see inventory.json")
 
@@ -312,7 +346,7 @@ def main() -> None:
     provenance = {
         "requested_mode": args.mode,
         "resolved_mode": "recompute" if recompute else "validate",
-        "step3_source_sha256": hashlib.sha256((HERE / "src" / "step3.py").read_bytes()).hexdigest(),
+        "step3_source_sha256": hashlib.sha256(STEP3_SOURCE_FILE.read_bytes()).hexdigest(),
         "config": config,
         "tv1_input_dir": str(tv1_dir),
         "final_output_dir": str(out_dir if recompute else tv1_dir),

@@ -2,7 +2,6 @@
 
 from typing import Tuple
 import numpy as np
-import SimpleITK as sitk
 from skimage import exposure, restoration
 
 
@@ -14,6 +13,8 @@ def apply_n4_bias_correction_3d(
     Optional 3D N4ITK Bias Field Correction on MRI VOI.
     Uses shrink_factor >= 2 and Otsu mask for fast execution when enabled.
     """
+    import SimpleITK as sitk
+
     raw_arr = np.maximum(volume_zyx.astype(np.float32), 1e-4)
     img_sitk = sitk.GetImageFromArray(raw_arr)
     mask_sitk = sitk.OtsuThreshold(img_sitk, 0, 1)
@@ -62,6 +63,8 @@ def edge_preserving_denoise_3d(
         )
         return denoised.astype(np.float32)
     elif method == "curvature_flow":
+        import SimpleITK as sitk
+
         img_sitk = sitk.GetImageFromArray(vol)
         cf_filter = sitk.CurvatureAnisotropicDiffusionImageFilter()
         cf_filter.SetTimeStep(0.03)
@@ -144,6 +147,13 @@ def synthesize_three_channels(
       - Channel C2 (I_sub):   Z-score normalized subtraction image max(0, I_post1 - I_pre)
       - Channel C3 (I_PE):    Percent Enhancement map + 3D CLAHE + Z-score normalization
     """
+    if pre_voi.ndim != 3 or pre_voi.shape != post1_voi.shape:
+        raise ValueError("Pre and Post1 VOI must have the same 3D shape")
+    if not np.isfinite(pre_voi).all() or not np.isfinite(post1_voi).all():
+        raise ValueError("Pre and Post1 VOI must contain only finite values")
+    if output_dtype not in {"float16", "float32"}:
+        raise ValueError("output_dtype must be float16 or float32")
+
     i_pre = pre_voi.astype(np.float32)
     i_post1 = post1_voi.astype(np.float32)
 

@@ -1,0 +1,9 @@
+group_type,group_value,cases,mean_post1_bg_std,mean_post1_tumor_minus_bg,mean_sub_bg_std,mean_sub_tumor_minus_bg,mean_pe_clahe_bg_std,mean_pe_clahe_tumor_minus_bg
+dataset,DUKE,288,0.91404,3.43273,0.84794,4.35706,0.94961,2.15794
+dataset,ISPY1,166,0.8731,3.19751,0.77881,4.38954,0.93637,2.28105
+dataset,ISPY2,980,0.91132,3.19216,0.81575,4.29807,0.94482,2.13155
+dataset,NACT,46,0.86504,3.50077,0.81153,4.01187,0.95712,1.93551
+tumor_subtype,HER2-enriched,169,0.90765,3.32274,0.81835,4.53193,0.94837,2.28117
+tumor_subtype,HER2-pure,65,0.87933,3.35593,0.80162,4.10998,0.93478,2.1148
+tumor_subtype,Luminal,747,0.90879,3.28604,0.81593,4.40695,0.94714,2.15839
+tumor_subtype,Triple Negative,499,0.90511,3.15514,0.82235,4.11847,0.94253,2.08977
