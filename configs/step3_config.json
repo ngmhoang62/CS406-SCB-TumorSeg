@@ -1,0 +1,15 @@
+{
+  "apply_n4": false,
+  "n4_shrink_factor": 2,
+  "apply_denoise": true,
+  "denoise_method": "nlmeans",
+  "nlmeans_patch_size": 3,
+  "nlmeans_patch_distance": 5,
+  "nlmeans_h_factor": 0.8,
+  "clip_percentiles": [0.5, 99.5],
+  "pe_tau_percentile": 5.0,
+  "clahe_clip_limit": 0.03,
+  "clahe_kernel_size": 16,
+  "zscore_eps": 1e-8,
+  "output_dtype": "float16"
+}
