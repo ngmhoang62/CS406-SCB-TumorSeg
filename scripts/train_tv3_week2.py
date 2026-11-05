@@ -268,7 +268,7 @@ def run_tv3_week2_suite(
     patch_size: tuple[int, int, int] = (96, 96, 96),
     sw_batch_size: int = 8,
     sw_overlap: float = 0.5,
-    num_workers: int = 4,
+    num_workers: int = 12,
     cache_rate: float = 0.0,
     use_amp: bool = True,
     use_weighted_sampler: bool = True,
@@ -475,7 +475,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--patch-size", type=int, nargs=3, default=[96, 96, 96])
     parser.add_argument("--sw-batch-size", type=int, default=8)
     parser.add_argument("--sw-overlap", type=float, default=0.5)
-    parser.add_argument("--num-workers", type=int, default=4)
+    parser.add_argument("--num-workers", type=int, default=12)
     parser.add_argument("--cache-rate", type=float, default=0.0)
     parser.add_argument("--no-amp", action="store_true", help="Disable bfloat16 AMP and run pure fp32")
     parser.add_argument("--save-last-every", type=int, default=20)
