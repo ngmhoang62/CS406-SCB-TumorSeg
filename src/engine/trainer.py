@@ -123,12 +123,25 @@ class Trainer:
         }
 
     def _atomic_torch_save(self, obj, target_path: Path):
-        """Save via temporary file then atomic replace to prevent corrupt checkpoints on interrupt/FUSE lag."""
+        """Save via temporary file, fsync to storage, atomic replace, and sync OS buffers."""
+        import os
+
         target_path = Path(target_path)
+        target_path.parent.mkdir(parents=True, exist_ok=True)
         tmp_path = target_path.with_name(f"{target_path.name}.tmp")
         try:
-            torch.save(obj, tmp_path)
+            with open(tmp_path, "wb") as f:
+                torch.save(obj, f)
+                f.flush()
+                try:
+                    os.fsync(f.fileno())
+                except OSError:
+                    pass
             tmp_path.replace(target_path)
+            try:
+                os.sync()
+            except Exception:
+                pass
         except Exception:
             if tmp_path.is_file():
                 try:
@@ -265,4 +278,9 @@ class Trainer:
             "run_config": run_config or {},
         }
         summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+        try:
+            import os
+            os.sync()
+        except Exception:
+            pass
         return pd.DataFrame(history)

@@ -452,6 +452,14 @@ def run_tv3_week2_suite(
         print("TV3 WEEK 2 ABLATION SUMMARY (M2: 3D Attention U-Net):", flush=True)
         print(summary_df.to_string(index=False), flush=True)
         print("=" * 80, flush=True)
+
+    try:
+        import os, time
+        os.sync()
+        time.sleep(3)
+    except Exception:
+        pass
+
     return summary_df
 
 
