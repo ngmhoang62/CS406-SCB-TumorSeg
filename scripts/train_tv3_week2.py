@@ -53,8 +53,10 @@ TV3_WEEK2_RUNS: List[Dict[str, Any]] = [
         "run_name": "run07_M2_IP1_post1_no_film",
         "arch": "M2",
         "ip_mode": "IP1_post1",
+        "ip_label": "IP1 (Post-1)",
         "in_channels": 1,
         "use_film": False,
+        "plot_label": "IP1 (Post-1) | No FiLM",
         "description": "3D Attention U-Net | IP1 (Post-1) | No FiLM",
     },
     {
@@ -62,8 +64,10 @@ TV3_WEEK2_RUNS: List[Dict[str, Any]] = [
         "run_name": "run08_M2_IP1_post1_film",
         "arch": "M2",
         "ip_mode": "IP1_post1",
+        "ip_label": "IP1 (Post-1)",
         "in_channels": 1,
         "use_film": True,
+        "plot_label": "IP1 (Post-1) | With FiLM",
         "description": "3D Attention U-Net | IP1 (Post-1) | Multi-Stage FiLM",
     },
     {
@@ -71,8 +75,10 @@ TV3_WEEK2_RUNS: List[Dict[str, Any]] = [
         "run_name": "run09_M2_IP2_sub_no_film",
         "arch": "M2",
         "ip_mode": "IP2_sub",
+        "ip_label": "IP2 (Subtraction)",
         "in_channels": 1,
         "use_film": False,
+        "plot_label": "IP2 (Subtraction) | No FiLM",
         "description": "3D Attention U-Net | IP2 (Subtraction) | No FiLM",
     },
     {
@@ -80,8 +86,10 @@ TV3_WEEK2_RUNS: List[Dict[str, Any]] = [
         "run_name": "run10_M2_IP2_sub_film",
         "arch": "M2",
         "ip_mode": "IP2_sub",
+        "ip_label": "IP2 (Subtraction)",
         "in_channels": 1,
         "use_film": True,
+        "plot_label": "IP2 (Subtraction) | With FiLM",
         "description": "3D Attention U-Net | IP2 (Subtraction) | Multi-Stage FiLM",
     },
     {
@@ -89,8 +97,10 @@ TV3_WEEK2_RUNS: List[Dict[str, Any]] = [
         "run_name": "run11_M2_IP3_multi_no_film",
         "arch": "M2",
         "ip_mode": "IP3_multi",
+        "ip_label": "IP3 (Multi-Channel)",
         "in_channels": 3,
         "use_film": False,
+        "plot_label": "IP3 (Multi-Channel) | No FiLM",
         "description": "3D Attention U-Net | IP3 (3-Channel Multi) | No FiLM",
     },
     {
@@ -98,8 +108,10 @@ TV3_WEEK2_RUNS: List[Dict[str, Any]] = [
         "run_name": "run12_M2_IP3_multi_film",
         "arch": "M2",
         "ip_mode": "IP3_multi",
+        "ip_label": "IP3 (Multi-Channel)",
         "in_channels": 3,
         "use_film": True,
+        "plot_label": "IP3 (Multi-Channel) | With FiLM",
         "description": "3D Attention U-Net | IP3 (3-Channel Multi) | Multi-Stage FiLM",
     },
 ]
@@ -114,13 +126,21 @@ def set_all_seeds(seed: int = 42) -> None:
     set_determinism(seed=seed)
 
 
-def update_ablation_summary_and_plots(checkpoints_root: Path, tables_dir: Path, figures_dir: Path) -> pd.DataFrame:
-    """Collect metrics from all completed/in-progress TV3 runs and export CSV + learning curves."""
+def update_ablation_summary_and_plots(
+    checkpoints_root: Path,
+    tables_dir: Path,
+    figures_dir: Path,
+    logs_dir: Path | None = None,
+) -> pd.DataFrame:
+    """Collect metrics from all completed/in-progress M2 runs and export CSVs + learning curves."""
     tables_dir.mkdir(parents=True, exist_ok=True)
     figures_dir.mkdir(parents=True, exist_ok=True)
+    if logs_dir is not None:
+        logs_dir.mkdir(parents=True, exist_ok=True)
 
     rows = []
     histories: Dict[str, pd.DataFrame] = {}
+    combined_history_frames: List[pd.DataFrame] = []
 
     for spec in TV3_WEEK2_RUNS:
         run_dir = checkpoints_root / spec["run_name"]
@@ -135,6 +155,17 @@ def update_ablation_summary_and_plots(checkpoints_root: Path, tables_dir: Path, 
         if df_hist.empty:
             continue
         histories[spec["run_id"]] = df_hist
+
+        if logs_dir is not None:
+            df_hist.to_csv(logs_dir / f"{spec['run_name']}_history.csv", index=False)
+
+        df_tagged = df_hist.copy()
+        df_tagged.insert(0, "use_film", spec["use_film"])
+        df_tagged.insert(0, "ip_mode", spec["ip_mode"])
+        df_tagged.insert(0, "arch", spec["arch"])
+        df_tagged.insert(0, "run_name", spec["run_name"])
+        df_tagged.insert(0, "run_id", spec["run_id"])
+        combined_history_frames.append(df_tagged)
 
         best_idx = int(df_hist["val_dice"].idxmax())
         best_row = df_hist.loc[best_idx]
@@ -160,13 +191,21 @@ def update_ablation_summary_and_plots(checkpoints_root: Path, tables_dir: Path, 
                 "best_epoch": int(best_row["epoch"]),
                 "best_val_dice": float(best_row["val_dice"]),
                 "best_val_loss": float(best_row["val_loss"]),
+                "train_dice_at_best": float(best_row["train_dice"]),
+                "train_loss_at_best": float(best_row["train_loss"]),
                 "final_train_loss": float(df_hist["train_loss"].iloc[-1]),
                 "final_train_dice": float(df_hist["train_dice"].iloc[-1]),
+                "final_val_loss": float(df_hist["val_loss"].iloc[-1]),
+                "final_val_dice": float(df_hist["val_dice"].iloc[-1]),
                 "completed": completed,
                 "stopped_early": stopped_early,
                 "best_ckpt_exists": best_path.is_file(),
             }
         )
+
+    if combined_history_frames:
+        all_hist_df = pd.concat(combined_history_frames, ignore_index=True)
+        all_hist_df.to_csv(tables_dir / "tv3_week2_training_histories.csv", index=False)
 
     summary_df = pd.DataFrame(rows)
     if not summary_df.empty:
@@ -176,31 +215,38 @@ def update_ablation_summary_and_plots(checkpoints_root: Path, tables_dir: Path, 
         try:
             import matplotlib.pyplot as plt
 
-            fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+            fig, axes = plt.subplots(1, 3, figsize=(18, 5))
             for spec in TV3_WEEK2_RUNS:
                 rid = spec["run_id"]
                 if rid not in histories:
                     continue
                 h = histories[rid]
-                label = f"{rid}: {spec['ip_mode']} ({'FiLM' if spec['use_film'] else 'No-FiLM'})"
+                label = spec["plot_label"]
                 linestyle = "-" if spec["use_film"] else "--"
-                axes[0].plot(h["epoch"], h["train_loss"], linestyle=linestyle, label=label)
-                axes[1].plot(h["epoch"], h["val_dice"], linestyle=linestyle, label=label)
+                axes[0].plot(h["epoch"], h["train_loss"], linestyle=linestyle, linewidth=1.8, label=label)
+                axes[1].plot(h["epoch"], h["val_loss"], linestyle=linestyle, linewidth=1.8, label=label)
+                axes[2].plot(h["epoch"], h["val_dice"], linestyle=linestyle, linewidth=1.8, label=label)
 
-            axes[0].set_title("TV3 Week 2 — M2 (3D Attention U-Net) Train Loss")
+            axes[0].set_title("3D Attention U-Net — Training Loss")
             axes[0].set_xlabel("Epoch")
             axes[0].set_ylabel("Dice + BCE Loss (Deep Supervision)")
             axes[0].grid(True, alpha=0.3)
             axes[0].legend(fontsize=8)
 
-            axes[1].set_title("TV3 Week 2 — M2 (3D Attention U-Net) Validation Dice")
+            axes[1].set_title("3D Attention U-Net — Validation Loss")
             axes[1].set_xlabel("Epoch")
-            axes[1].set_ylabel("Validation Dice")
+            axes[1].set_ylabel("Validation Dice + BCE Loss")
             axes[1].grid(True, alpha=0.3)
             axes[1].legend(fontsize=8)
 
+            axes[2].set_title("3D Attention U-Net — Validation Dice Score")
+            axes[2].set_xlabel("Epoch")
+            axes[2].set_ylabel("Validation Dice")
+            axes[2].grid(True, alpha=0.3)
+            axes[2].legend(fontsize=8)
+
             fig.tight_layout()
-            fig.savefig(figures_dir / "tv3_week2_learning_curves.png", dpi=180)
+            fig.savefig(figures_dir / "tv3_week2_learning_curves.png", dpi=200)
             plt.close(fig)
         except Exception as exc:
             print(f"[WARN] Could not plot learning curves: {exc}", flush=True)
@@ -220,10 +266,11 @@ def run_tv3_week2_suite(
     lr: float | None = None,
     weight_decay: float | None = None,
     patch_size: tuple[int, int, int] = (96, 96, 96),
-    sw_batch_size: int = 4,
+    sw_batch_size: int = 8,
     sw_overlap: float = 0.5,
-    num_workers: int = 2,
+    num_workers: int = 4,
     cache_rate: float = 0.0,
+    use_amp: bool = True,
     use_weighted_sampler: bool = True,
     save_last_every: int = 20,
     early_stopping_patience: int | None = 25,
@@ -247,6 +294,7 @@ def run_tv3_week2_suite(
     checkpoints_root = output_root / "checkpoints" / "tv3_week2"
     tables_dir = output_root / "tables"
     figures_dir = output_root / "figures"
+    logs_dir = output_root / "logs"
     checkpoints_root.mkdir(parents=True, exist_ok=True)
 
     if selected_runs and "all" not in [r.lower() for r in selected_runs]:
@@ -298,7 +346,7 @@ def run_tv3_week2_suite(
                         f"@ epoch {summary_data.get('best_epoch', 0)}).",
                         flush=True,
                     )
-                    update_ablation_summary_and_plots(checkpoints_root, tables_dir, figures_dir)
+                    update_ablation_summary_and_plots(checkpoints_root, tables_dir, figures_dir, logs_dir)
                     continue
             except Exception:
                 pass
@@ -349,7 +397,7 @@ def run_tv3_week2_suite(
             criterion=criterion,
             scheduler=scheduler,
             device=device,
-            use_amp=True,
+            use_amp=use_amp,
             grad_clip=1.0,
             val_roi_size=patch_size,
             sw_batch_size=sw_batch_size,
@@ -363,12 +411,18 @@ def run_tv3_week2_suite(
             "ip_mode": spec["ip_mode"],
             "in_channels": int(spec["in_channels"]),
             "use_film": bool(spec["use_film"]),
+            "num_subtypes": int(model_cfg["num_subtypes"]),
+            "film_embed_dim": int(model_cfg["film_embed_dim"]),
+            "deep_supervision": bool(model_cfg["deep_supervision"]),
+            "base_channels": [int(c) for c in base_channels],
             "epochs": int(epochs),
             "warmup_epochs": int(warmup_epochs),
             "batch_size": int(batch_size),
             "lr": float(lr),
             "weight_decay": float(weight_decay),
             "patch_size": list(patch_size),
+            "sw_batch_size": int(sw_batch_size),
+            "sw_overlap": float(sw_overlap),
             "use_weighted_sampler": bool(use_weighted_sampler),
             "early_stopping_patience": int(early_stopping_patience) if early_stopping_patience else 0,
             "seed": int(seed),
@@ -390,9 +444,9 @@ def run_tv3_week2_suite(
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
-        update_ablation_summary_and_plots(checkpoints_root, tables_dir, figures_dir)
+        update_ablation_summary_and_plots(checkpoints_root, tables_dir, figures_dir, logs_dir)
 
-    summary_df = update_ablation_summary_and_plots(checkpoints_root, tables_dir, figures_dir)
+    summary_df = update_ablation_summary_and_plots(checkpoints_root, tables_dir, figures_dir, logs_dir)
     if not summary_df.empty:
         print("\n" + "=" * 80, flush=True)
         print("TV3 WEEK 2 ABLATION SUMMARY (M2: 3D Attention U-Net):", flush=True)
@@ -415,14 +469,15 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--epochs", type=int, default=120)
     parser.add_argument("--warmup-epochs", type=int, default=5)
-    parser.add_argument("--batch-size", type=int, default=4)
+    parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--lr", type=float, default=3e-4)
     parser.add_argument("--weight-decay", type=float, default=1e-5)
     parser.add_argument("--patch-size", type=int, nargs=3, default=[96, 96, 96])
-    parser.add_argument("--sw-batch-size", type=int, default=4)
+    parser.add_argument("--sw-batch-size", type=int, default=8)
     parser.add_argument("--sw-overlap", type=float, default=0.5)
-    parser.add_argument("--num-workers", type=int, default=2)
+    parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument("--cache-rate", type=float, default=0.0)
+    parser.add_argument("--no-amp", action="store_true", help="Disable bfloat16 AMP and run pure fp32")
     parser.add_argument("--save-last-every", type=int, default=20)
     parser.add_argument("--early-stopping-patience", type=int, default=25)
     parser.add_argument("--no-resume", action="store_true", help="Force training from scratch (ignore existing checkpoints)")
@@ -448,6 +503,7 @@ if __name__ == "__main__":
         sw_overlap=args.sw_overlap,
         num_workers=args.num_workers,
         cache_rate=args.cache_rate,
+        use_amp=not args.no_amp,
         save_last_every=args.save_last_every,
         early_stopping_patience=args.early_stopping_patience if args.early_stopping_patience > 0 else None,
         resume=not args.no_resume,
