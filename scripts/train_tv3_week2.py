@@ -381,7 +381,7 @@ def run_tv3_week2_suite(
             num_subtypes=int(model_cfg["num_subtypes"]),
             film_embed_dim=int(model_cfg["film_embed_dim"]),
             deep_supervision=bool(model_cfg["deep_supervision"]),
-            base_channels=base_channels,
+            resunet_channels=base_channels,
         )
         optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
         scheduler = LinearWarmupCosineAnnealingLR(
