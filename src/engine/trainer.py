@@ -122,6 +122,21 @@ class Trainer:
             "amp_bf16": bool(self.amp_enabled),
         }
 
+    def _atomic_torch_save(self, obj, target_path: Path):
+        """Save via temporary file then atomic replace to prevent corrupt checkpoints on interrupt/FUSE lag."""
+        target_path = Path(target_path)
+        tmp_path = target_path.with_name(f"{target_path.name}.tmp")
+        try:
+            torch.save(obj, tmp_path)
+            tmp_path.replace(target_path)
+        except Exception:
+            if tmp_path.is_file():
+                try:
+                    tmp_path.unlink()
+                except Exception:
+                    pass
+            raise
+
     def fit(self, train_loader, val_loader, epochs, output_dir, run_config=None,
             resume=True, save_last_every=20, early_stopping_patience=None):
         output_dir = Path(output_dir)
@@ -203,7 +218,7 @@ class Trainer:
                     ep_num, best_dice, best_dice, best_epoch, no_improve, run_config,
                     completed=(ep_num == epochs), stopped_early=False,
                 )
-                torch.save(best_ckpt, best_path)
+                self._atomic_torch_save(best_ckpt, best_path)
             else:
                 no_improve += 1
 
@@ -223,7 +238,7 @@ class Trainer:
                     ep_num, val["dice"], best_dice, best_epoch, no_improve, run_config,
                     completed=is_final_epoch, stopped_early=will_stop_early,
                 )
-                torch.save(last_ckpt, last_path)
+                self._atomic_torch_save(last_ckpt, last_path)
 
             print(
                 f"Epoch {ep_num}/{epochs} ({elapsed:.1f}s) | train_loss={train['loss']:.4f} | "
