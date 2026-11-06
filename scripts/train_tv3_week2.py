@@ -383,7 +383,22 @@ def run_tv3_week2_suite(
             deep_supervision=bool(model_cfg["deep_supervision"]),
             resunet_channels=base_channels,
         )
-        optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
+
+        # Differential Learning Rates:
+        # Backbone gets primary learning rate (lr), while FiLM generator parameters get
+        # a smaller learning rate (lr_film = lr / 3) and higher weight decay to prevent
+        # the linear heads from racing ahead and locking into shallow local minima.
+        if spec["use_film"] and hasattr(model, "film_generator") and model.film_generator is not None:
+            film_params = list(model.film_generator.parameters())
+            film_param_ids = set(id(p) for p in film_params)
+            backbone_params = [p for p in model.parameters() if id(p) not in film_param_ids]
+            optimizer_grouped_params = [
+                {"params": backbone_params, "lr": lr, "weight_decay": weight_decay},
+                {"params": film_params, "lr": lr / 3.0, "weight_decay": 1e-4},
+            ]
+            optimizer = torch.optim.AdamW(optimizer_grouped_params)
+        else:
+            optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
         scheduler = LinearWarmupCosineAnnealingLR(
             optimizer,
             warmup_epochs=min(warmup_epochs, max(0, epochs - 1)),
