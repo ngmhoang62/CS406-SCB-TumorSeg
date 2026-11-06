@@ -37,7 +37,6 @@ class AdditiveAttentionGate3D(nn.Module):
         )
         self.psi = nn.Sequential(
             nn.Conv3d(F_int, 1, kernel_size=1, stride=1, padding=0, bias=True),
-            nn.InstanceNorm3d(1, affine=True),
             nn.Sigmoid(),
         )
         self.relu = nn.ReLU(inplace=True)
@@ -135,6 +134,8 @@ class SCBAttentionUNet3D(nn.Module):
                 stage_channels=self.film_stage_channels,
                 num_subtypes=num_subtypes,
                 embed_dim=film_embed_dim,
+                subtype_dropout_prob=0.15,
+                max_modulation=0.5,
             )
         else:
             self.film_generator = None

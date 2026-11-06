@@ -30,11 +30,15 @@ class MultiStageFiLM(nn.Module):
         stage_channels: List[int] | Tuple[int, ...],
         num_subtypes: int = 4,
         embed_dim: int = 128,
+        subtype_dropout_prob: float = 0.15,
+        max_modulation: float = 0.5,
     ) -> None:
         super().__init__()
         self.stage_channels = list(stage_channels)
         self.num_subtypes = num_subtypes
         self.embed_dim = embed_dim
+        self.subtype_dropout_prob = subtype_dropout_prob
+        self.max_modulation = max_modulation
 
         # Shared Embedding MLP: s (4) -> Linear(4, 128) -> LayerNorm(128) -> SiLU
         self.shared_mlp = nn.Sequential(
@@ -89,14 +93,27 @@ class MultiStageFiLM(nn.Module):
     ) -> List[Tuple[torch.Tensor, torch.Tensor]]:
         """
         Compute list of (gamma^(l), beta^(l)) broadcastable to 3D feature maps (B, C_l, 1, 1, 1).
+        Includes:
+          - Classifier-Free Subtype Conditioning Dropout (p=0.15 during training)
+          - Bounded Tanh Modulation: gamma = alpha_max * tanh(hat_gamma), beta = alpha_max * tanh(hat_beta)
         """
         s_onehot = self.encode_subtype_onehot(subtype, dtype=dtype)
+
+        # Classifier-free guidance / condition dropout: randomly drop conditioning to zero vector
+        if self.training and self.subtype_dropout_prob > 0.0:
+            drop_mask = (torch.rand(s_onehot.size(0), 1, device=s_onehot.device) > self.subtype_dropout_prob).to(dtype=s_onehot.dtype)
+            s_onehot = s_onehot * drop_mask
+
         embed = self.shared_mlp(s_onehot)  # (B, embed_dim)
 
         params: List[Tuple[torch.Tensor, torch.Tensor]] = []
         for head, c_l in zip(self.heads, self.stage_channels):
             gb = head(embed)  # (B, 2 * C_l)
             gamma, beta = torch.split(gb, c_l, dim=-1)
+            # Bound modulation parameters with tanh to prevent gradient explosion and feature blowup
+            if self.max_modulation > 0.0:
+                gamma = self.max_modulation * torch.tanh(gamma)
+                beta = self.max_modulation * torch.tanh(beta)
             params.append((gamma.view(-1, c_l, 1, 1, 1), beta.view(-1, c_l, 1, 1, 1)))
         return params
 
