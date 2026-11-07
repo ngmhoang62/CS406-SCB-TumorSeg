@@ -268,12 +268,14 @@ def run_tv3_week2_suite(
     patch_size: tuple[int, int, int] = (96, 96, 96),
     sw_batch_size: int = 8,
     sw_overlap: float = 0.5,
-    num_workers: int = 12,
-    cache_rate: float = 0.0,
+    num_workers: int = 4,
+    cache_rate: float = 1.0,
     use_amp: bool = True,
     use_weighted_sampler: bool = True,
+    sampler_power: float = 0.5,
     save_last_every: int = 20,
     early_stopping_patience: int | None = 25,
+    early_stopping_min_epochs: int = 45,
     resume: bool = True,
     seed: int = 42,
 ) -> pd.DataFrame:
@@ -317,11 +319,11 @@ def run_tv3_week2_suite(
     print(f"  NPZ Directory          : {npz_dir}", flush=True)
     print(f"  Checkpoints Root       : {checkpoints_root}", flush=True)
     print(f"  Epochs / Warmup        : {epochs} / {warmup_epochs}", flush=True)
-    print(f"  Early Stopping Patience: {early_stopping_patience}", flush=True)
+    print(f"  Early Stopping Patience: {early_stopping_patience} (min_epochs={early_stopping_min_epochs})", flush=True)
     print(f"  Save last.pt Every     : {save_last_every} epochs (single file overwrite)", flush=True)
     print(f"  Batch Size / LR / WD   : {batch_size} / {lr} / {weight_decay}", flush=True)
     print(f"  Patch Size / SW Batch  : {patch_size} / {sw_batch_size} (overlap={sw_overlap})", flush=True)
-    print(f"  WeightedRandomSampler  : {use_weighted_sampler} | Cache Rate: {cache_rate}", flush=True)
+    print(f"  WeightedRandomSampler  : {use_weighted_sampler} (power={sampler_power}) | Cache Rate: {cache_rate}", flush=True)
     print("=" * 80, flush=True)
 
     current_ip_mode: str | None = None
@@ -370,6 +372,7 @@ def run_tv3_week2_suite(
                 cache_rate=cache_rate,
                 seed=seed,
                 use_weighted_sampler=use_weighted_sampler,
+                sampler_power=sampler_power,
             )
             current_ip_mode = ip_mode
 
@@ -394,7 +397,7 @@ def run_tv3_week2_suite(
             backbone_params = [p for p in model.parameters() if id(p) not in film_param_ids]
             optimizer_grouped_params = [
                 {"params": backbone_params, "lr": lr, "weight_decay": weight_decay},
-                {"params": film_params, "lr": lr / 3.0, "weight_decay": 1e-4},
+                {"params": film_params, "lr": lr * 0.5, "weight_decay": 1e-4},
             ]
             optimizer = torch.optim.AdamW(optimizer_grouped_params)
         else:
@@ -439,7 +442,9 @@ def run_tv3_week2_suite(
             "sw_batch_size": int(sw_batch_size),
             "sw_overlap": float(sw_overlap),
             "use_weighted_sampler": bool(use_weighted_sampler),
+            "sampler_power": float(sampler_power),
             "early_stopping_patience": int(early_stopping_patience) if early_stopping_patience else 0,
+            "early_stopping_min_epochs": int(early_stopping_min_epochs),
             "seed": int(seed),
         }
 
@@ -452,6 +457,7 @@ def run_tv3_week2_suite(
             resume=resume,
             save_last_every=save_last_every,
             early_stopping_patience=early_stopping_patience,
+            early_stopping_min_epochs=early_stopping_min_epochs,
         )
 
         del model, optimizer, scheduler, criterion, trainer
@@ -490,7 +496,7 @@ def parse_args() -> argparse.Namespace:
         default=["all"],
         help="Run IDs to execute, e.g. `--runs run07 run08` or `--runs all` (default: all)",
     )
-    parser.add_argument("--epochs", type=int, default=120)
+    parser.add_argument("--epochs", type=int, default=90)
     parser.add_argument("--warmup-epochs", type=int, default=5)
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--lr", type=float, default=3e-4)
@@ -498,11 +504,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--patch-size", type=int, nargs=3, default=[96, 96, 96])
     parser.add_argument("--sw-batch-size", type=int, default=8)
     parser.add_argument("--sw-overlap", type=float, default=0.5)
-    parser.add_argument("--num-workers", type=int, default=12)
-    parser.add_argument("--cache-rate", type=float, default=0.0)
+    parser.add_argument("--num-workers", type=int, default=4)
+    parser.add_argument("--cache-rate", type=float, default=1.0)
+    parser.add_argument("--sampler-power", type=float, default=0.5)
     parser.add_argument("--no-amp", action="store_true", help="Disable bfloat16 AMP and run pure fp32")
     parser.add_argument("--save-last-every", type=int, default=20)
     parser.add_argument("--early-stopping-patience", type=int, default=25)
+    parser.add_argument("--early-stopping-min-epochs", type=int, default=45)
     parser.add_argument("--no-resume", action="store_true", help="Force training from scratch (ignore existing checkpoints)")
     parser.add_argument("--seed", type=int, default=42)
     return parser.parse_args()
@@ -526,9 +534,11 @@ if __name__ == "__main__":
         sw_overlap=args.sw_overlap,
         num_workers=args.num_workers,
         cache_rate=args.cache_rate,
+        sampler_power=args.sampler_power,
         use_amp=not args.no_amp,
         save_last_every=args.save_last_every,
         early_stopping_patience=args.early_stopping_patience if args.early_stopping_patience > 0 else None,
+        early_stopping_min_epochs=args.early_stopping_min_epochs,
         resume=not args.no_resume,
         seed=args.seed,
     )

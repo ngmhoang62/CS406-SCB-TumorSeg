@@ -74,19 +74,20 @@ class Trainer:
 
     def _epoch(self, loader, training):
         self.model.train(training)
-        loss_sum = dice_sum = count = 0
+        loss_sum = torch.zeros((), device=self.device, dtype=torch.float64)
+        dice_sum = torch.zeros((), device=self.device, dtype=torch.float64)
+        count = 0
+        non_blocking = self.device.type == "cuda"
         for batch in loader:
-            image = batch["image"].to(self.device, dtype=torch.float32)
-            target = batch["mask"].to(self.device, dtype=torch.float32)
-            subtype = batch["subtype_id"].to(self.device, dtype=torch.long)
+            image = batch["image"].to(self.device, dtype=torch.float32, non_blocking=non_blocking)
+            target = batch["mask"].to(self.device, dtype=torch.float32, non_blocking=non_blocking)
+            subtype = batch["subtype_id"].to(self.device, dtype=torch.long, non_blocking=non_blocking)
             if training:
                 self.optimizer.zero_grad(set_to_none=True)
             with torch.set_grad_enabled(training):
                 with torch.autocast(device_type=self.device.type, dtype=torch.bfloat16, enabled=self.amp_enabled):
                     outputs = self.model(image, subtype=subtype) if training else self._forward_eval(image, subtype)
                     loss = self.criterion(outputs, target)
-                if not torch.isfinite(loss):
-                    raise FloatingPointError("Non-finite loss")
                 if training:
                     loss.backward()
                     torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.grad_clip, error_if_nonfinite=True)
@@ -100,11 +101,13 @@ class Trainer:
             dice = torch.where(denominator > 0, 2 * intersection / denominator.clamp_min(1), 1.0)
             batch_size = image.shape[0]
             count += batch_size
-            loss_sum += loss.detach().item() * batch_size
-            dice_sum += dice.sum().item()
+            loss_sum += loss.detach().to(torch.float64) * batch_size
+            dice_sum += dice.sum().to(torch.float64)
         if count == 0:
             raise ValueError("Cannot train/evaluate an empty loader")
-        return {"loss": loss_sum / count, "dice": dice_sum / count}
+        if not torch.isfinite(loss_sum):
+            raise FloatingPointError("Non-finite loss")
+        return {"loss": float((loss_sum / count).item()), "dice": float((dice_sum / count).item())}
 
     def _build_ckpt(self, epoch, val_dice, best_dice, best_epoch, no_improve, run_config, completed=False, stopped_early=False):
         return {
@@ -151,7 +154,8 @@ class Trainer:
             raise
 
     def fit(self, train_loader, val_loader, epochs, output_dir, run_config=None,
-            resume=True, save_last_every=20, early_stopping_patience=None):
+            resume=True, save_last_every=20, early_stopping_patience=None,
+            early_stopping_min_epochs=0):
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
         history_path = output_dir / "history.csv"
@@ -232,12 +236,13 @@ class Trainer:
                     completed=(ep_num == epochs), stopped_early=False,
                 )
                 self._atomic_torch_save(best_ckpt, best_path)
-            else:
+            elif ep_num > int(early_stopping_min_epochs or 0):
                 no_improve += 1
 
             will_stop_early = (
                 early_stopping_patience is not None
                 and early_stopping_patience > 0
+                and ep_num > int(early_stopping_min_epochs or 0)
                 and no_improve >= early_stopping_patience
             )
             is_final_epoch = (ep_num == epochs) or will_stop_early

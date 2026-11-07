@@ -103,7 +103,7 @@ class MAMA_MIA_Dataset(CacheDataset):
 
 def build_loaders(metadata_csv, npz_dir, ip_mode="IP3_multi", batch_size=2,
                   patch_size=(96, 96, 96), num_workers=0, cache_rate=1.0, seed=42,
-                  use_weighted_sampler=True):
+                  use_weighted_sampler=True, sampler_power=0.5):
     """Use num_workers=0 in Windows notebooks; val batch=1 handles variable VOIs."""
     datasets = {
         split: MAMA_MIA_Dataset(metadata_csv, npz_dir, split, ip_mode,
@@ -111,11 +111,13 @@ def build_loaders(metadata_csv, npz_dir, ip_mode="IP3_multi", batch_size=2,
         for split in ("train", "val")
     }
     loaders = {}
+    use_pw = bool(num_workers and int(num_workers) > 0)
     for split, dataset in datasets.items():
         generator = torch.Generator().manual_seed(seed)
         if split == "train" and use_weighted_sampler and "sample_weight" in dataset.metadata.columns:
+            raw_w = dataset.metadata["sample_weight"].to_numpy(dtype=np.float64)
             weights = torch.as_tensor(
-                dataset.metadata["sample_weight"].to_numpy(dtype=np.float64),
+                np.power(np.clip(raw_w, 1e-8, None), float(sampler_power)),
                 dtype=torch.double,
             )
             sampler = WeightedRandomSampler(
@@ -131,6 +133,7 @@ def build_loaders(metadata_csv, npz_dir, ip_mode="IP3_multi", batch_size=2,
                 sampler=sampler,
                 num_workers=num_workers,
                 pin_memory=torch.cuda.is_available(),
+                persistent_workers=use_pw,
                 generator=generator,
             )
         else:
@@ -140,6 +143,7 @@ def build_loaders(metadata_csv, npz_dir, ip_mode="IP3_multi", batch_size=2,
                 shuffle=(split == "train"),
                 num_workers=num_workers,
                 pin_memory=torch.cuda.is_available(),
+                persistent_workers=use_pw,
                 generator=generator,
             )
     return loaders
