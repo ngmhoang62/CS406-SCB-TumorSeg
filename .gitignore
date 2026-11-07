@@ -9,6 +9,7 @@ __pycache__/
 *$py.class
 .ipynb_checkpoints/
 .pytest_cache/
+.pytest_tmp/
 
 # Binary 3D Volumes & Preprocessed NPZ (Keep folder structure via .gitkeep, track light CSV/XLSX tables)
 data/raw/images/*
