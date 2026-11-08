@@ -14,6 +14,7 @@ from src.preprocessing.step2_spatial_voi import (
     compute_tumor_bbox_with_margin,
     extract_centered_voi_96,
     standardize_and_extract_voi,
+    standardize_and_extract_voi_fast,
 )
 from src.preprocessing.step3_image_proc import (
     apply_n4_bias_correction_3d,
@@ -36,6 +37,7 @@ __all__ = [
     "compute_tumor_bbox_with_margin",
     "extract_centered_voi_96",
     "standardize_and_extract_voi",
+    "standardize_and_extract_voi_fast",
     "apply_n4_bias_correction_3d",
     "edge_preserving_denoise_3d",
     "percentile_clip_3d",

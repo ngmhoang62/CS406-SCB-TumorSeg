@@ -133,7 +133,7 @@ def execute_steps_1_to_3(config_path: str = "configs/default_config.yaml") -> No
         )
 
         mask_4d = expert_voi[np.newaxis, ...].astype(np.uint8)
-        auto_mask_4d = auto_voi[np.newaxis, ...].astype(np.uint8)
+        auto_mask_4d = np.zeros_like(mask_4d) if auto_voi is None else auto_voi[np.newaxis, ...].astype(np.uint8)
         subtype_scalar = np.int64(subtype_id)
 
         # Save compressed .npz adhering strictly to the Data Contract

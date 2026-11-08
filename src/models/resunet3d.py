@@ -152,6 +152,9 @@ class SCBResUNet3D(nn.Module):
         self.out_head0 = UnetOutBlock(spatial_dims=3, in_channels=c0, out_channels=out_channels)
         self.out_head1 = UnetOutBlock(spatial_dims=3, in_channels=c1, out_channels=out_channels)
         self.out_head2 = UnetOutBlock(spatial_dims=3, in_channels=c2, out_channels=out_channels)
+        for head in (self.out_head0, self.out_head1, self.out_head2):
+            if getattr(head.conv, "conv", None) is not None and head.conv.conv.bias is not None:
+                nn.init.constant_(head.conv.conv.bias, -2.2)
 
     def forward(
         self,

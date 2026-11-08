@@ -158,12 +158,15 @@ def standardize_and_extract_voi(
     voi_size: Tuple[int, int, int] = (96, 96, 96),
     margin_ratio: float = 0.25,
     pad_mode: str = "constant",
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, Dict[str, Any]]:
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray | None, Dict[str, Any]]:
     """
     Full Step 2 execution on a single case:
       1. Reorient Pre, Post1, Expert Mask, and Auto Mask to RAS.
       2. Resample to 1x1x1 mm^3 isotropic (B-Spline for MRI, Nearest-Neighbor for Masks).
       3. Extract 96x96x96 3D VOI around primary tumor (+25% margin).
+    Note: the VOI box is derived from the EXPERT mask (also for test cases) -- a known limitation that must be
+    stated when comparing with baselines that run on the full image (e.g. B0.3 nnU-Net).
+    Returns `auto_voi = None` when no automatic mask was provided (no silent fallback).
     """
     pre_ras = standardize_orientation_ras(pre_sitk, target_orientation)
     post1_ras = standardize_orientation_ras(post1_sitk, target_orientation)
@@ -197,6 +200,81 @@ def standardize_and_extract_voi(
     if auto_mask_sitk is not None:
         auto_voi = (cropped_vols[2] > 0).astype(np.uint8)
     else:
-        auto_voi = expert_voi.copy()
+        # IMPORTANT: never substitute the expert mask here -- it would make baseline B0.2 score Dice = 1.
+        # The caller must handle `None` (log the case and exclude it from B0.2 evaluation).
+        auto_voi = None
 
+    return pre_voi, post1_voi, expert_voi, auto_voi, voi_info
+
+
+def _resample_window(
+    image_ras: sitk.Image,
+    ref_iso: sitk.Image,
+    start_xyz: Tuple[int, int, int],
+    size_xyz: Tuple[int, int, int],
+    is_mask: bool,
+) -> np.ndarray:
+    """Resample `image_ras` only on a window of the 1 mm grid defined by `ref_iso` (zeros outside the image)."""
+    f = sitk.ResampleImageFilter()
+    f.SetInterpolator(sitk.sitkNearestNeighbor if is_mask else sitk.sitkBSpline)
+    f.SetOutputSpacing(ref_iso.GetSpacing())
+    f.SetOutputDirection(ref_iso.GetDirection())
+    f.SetOutputOrigin(ref_iso.TransformIndexToPhysicalPoint([int(s) for s in start_xyz]))
+    f.SetSize([int(s) for s in size_xyz])
+    f.SetDefaultPixelValue(0)
+    f.SetOutputPixelType(sitk.sitkUInt8 if is_mask else sitk.sitkFloat32)
+    f.SetTransform(sitk.Transform())
+    return sitk.GetArrayFromImage(f.Execute(image_ras))
+
+
+def standardize_and_extract_voi_fast(
+    pre_sitk: sitk.Image,
+    post1_sitk: sitk.Image,
+    expert_mask_sitk: sitk.Image,
+    auto_mask_sitk: sitk.Image | None = None,
+    target_orientation: str = "RAS",
+    target_spacing: Tuple[float, float, float] = (1.0, 1.0, 1.0),
+    voi_size: Tuple[int, int, int] = (96, 96, 96),
+    margin_ratio: float = 0.25,
+    pad_mode: str = "constant",
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray | None, Dict[str, Any]]:
+    """
+    Same output as `standardize_and_extract_voi` but B-Spline resamples ONLY the VOI window instead of the whole
+    volume (the full-volume resample dominates the runtime). The window is found from the expert mask (cheap
+    nearest-neighbour resample). Outside the image the window is zero-filled, i.e. `pad_mode="constant"`.
+    """
+    if pad_mode != "constant":
+        return standardize_and_extract_voi(pre_sitk, post1_sitk, expert_mask_sitk, auto_mask_sitk,
+                                           target_orientation, target_spacing, voi_size, margin_ratio, pad_mode)
+
+    pre_ras = standardize_orientation_ras(pre_sitk, target_orientation)
+    post1_ras = standardize_orientation_ras(post1_sitk, target_orientation)
+    expert_ras = standardize_orientation_ras(expert_mask_sitk, target_orientation)
+
+    expert_iso = resample_isotropic_1mm(expert_ras, target_spacing, is_mask=True)
+    expert_np = (sitk.GetArrayFromImage(expert_iso) > 0).astype(np.uint8)
+
+    (bz, by, bx) = compute_tumor_bbox_with_margin(expert_np, margin_ratio=margin_ratio)
+    cz, cy, cx = (bz[0] + bz[1]) // 2, (by[0] + by[1]) // 2, (bx[0] + bx[1]) // 2
+    td = max(voi_size[0], bz[1] - bz[0])
+    th = max(voi_size[1], by[1] - by[0])
+    tw = max(voi_size[2], bx[1] - bx[0])
+    z0, y0, x0 = cz - td // 2, cy - th // 2, cx - tw // 2
+    start, size = (x0, y0, z0), (tw, th, td)  # SimpleITK index order is (x, y, z)
+
+    pre_voi = np.clip(_resample_window(pre_ras, expert_iso, start, size, False), 0.0, None).astype(np.float32)
+    post1_voi = np.clip(_resample_window(post1_ras, expert_iso, start, size, False), 0.0, None).astype(np.float32)
+    expert_voi = (_resample_window(expert_ras, expert_iso, start, size, True) > 0).astype(np.uint8)
+
+    auto_voi = None
+    if auto_mask_sitk is not None:
+        auto_ras = standardize_orientation_ras(auto_mask_sitk, target_orientation)
+        auto_voi = (_resample_window(auto_ras, expert_iso, start, size, True) > 0).astype(np.uint8)
+
+    voi_info = {
+        "center_zyx": (int(cz), int(cy), int(cx)),
+        "bbox_with_margin_zyx": (bz, by, bx),
+        "voi_shape_zyx": (td, th, tw),
+        "resampled_shape_zyx": tuple(int(s) for s in expert_np.shape),
+    }
     return pre_voi, post1_voi, expert_voi, auto_voi, voi_info

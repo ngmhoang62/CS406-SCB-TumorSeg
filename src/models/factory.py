@@ -47,6 +47,7 @@ def build_model(
     film_embed_dim: int = 128,
     deep_supervision: bool = True,
     resunet_channels: Sequence[int] = (32, 64, 128, 256, 320),
+    base_channels: Sequence[int] | None = None,
     swin_feature_size: int = 48,
     swin_use_checkpoint: bool = True,
 ) -> nn.Module:
@@ -59,12 +60,13 @@ def build_model(
     """
     c_in = resolve_in_channels(ip_mode=ip_mode, in_channels=in_channels)
     arch_key = arch.strip().lower()
+    channels = tuple(base_channels) if base_channels is not None else tuple(resunet_channels)
 
     if arch_key in ("m1", "resunet", "3d_resunet", "dynunet"):
         return SCBResUNet3D(
             in_channels=c_in,
             out_channels=1,
-            channels=resunet_channels,
+            channels=channels,
             use_film=use_film,
             num_subtypes=num_subtypes,
             film_embed_dim=film_embed_dim,
@@ -74,7 +76,7 @@ def build_model(
         return SCBAttentionUNet3D(
             in_channels=c_in,
             out_channels=1,
-            channels=resunet_channels,
+            channels=channels,
             use_film=use_film,
             num_subtypes=num_subtypes,
             film_embed_dim=film_embed_dim,

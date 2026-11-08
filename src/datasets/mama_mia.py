@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import torch
 from monai.data import CacheDataset, DataLoader
+from torch.utils.data import WeightedRandomSampler
 from monai.transforms import (
     Compose, MapTransform, RandFlipd, RandRotate90d, RandScaleIntensityd,
     RandSpatialCropd, SpatialPadd,
@@ -101,17 +102,48 @@ class MAMA_MIA_Dataset(CacheDataset):
 
 
 def build_loaders(metadata_csv, npz_dir, ip_mode="IP3_multi", batch_size=2,
-                  patch_size=(96, 96, 96), num_workers=0, cache_rate=1.0, seed=42):
+                  patch_size=(96, 96, 96), num_workers=0, cache_rate=1.0, seed=42,
+                  use_weighted_sampler=True, sampler_power=0.5):
     """Use num_workers=0 in Windows notebooks; val batch=1 handles variable VOIs."""
     datasets = {
         split: MAMA_MIA_Dataset(metadata_csv, npz_dir, split, ip_mode,
                                patch_size=patch_size, cache_rate=cache_rate, seed=seed)
         for split in ("train", "val")
     }
-    generator = torch.Generator().manual_seed(seed)
-    return {
-        split: DataLoader(dataset, batch_size=batch_size if split == "train" else 1,
-                          shuffle=split == "train", num_workers=num_workers,
-                          pin_memory=torch.cuda.is_available(), generator=generator)
-        for split, dataset in datasets.items()
-    }
+    loaders = {}
+    use_pw = bool(num_workers and int(num_workers) > 0)
+    for split, dataset in datasets.items():
+        generator = torch.Generator().manual_seed(seed)
+        if split == "train" and use_weighted_sampler and "sample_weight" in dataset.metadata.columns:
+            raw_w = dataset.metadata["sample_weight"].to_numpy(dtype=np.float64)
+            weights = torch.as_tensor(
+                np.power(np.clip(raw_w, 1e-8, None), float(sampler_power)),
+                dtype=torch.double,
+            )
+            sampler = WeightedRandomSampler(
+                weights=weights,
+                num_samples=len(weights),
+                replacement=True,
+                generator=generator,
+            )
+            loaders[split] = DataLoader(
+                dataset,
+                batch_size=batch_size,
+                shuffle=False,
+                sampler=sampler,
+                num_workers=num_workers,
+                pin_memory=torch.cuda.is_available(),
+                persistent_workers=use_pw,
+                generator=generator,
+            )
+        else:
+            loaders[split] = DataLoader(
+                dataset,
+                batch_size=batch_size if split == "train" else 1,
+                shuffle=(split == "train"),
+                num_workers=num_workers,
+                pin_memory=torch.cuda.is_available(),
+                persistent_workers=use_pw,
+                generator=generator,
+            )
+    return loaders

@@ -9,6 +9,7 @@ __pycache__/
 *$py.class
 .ipynb_checkpoints/
 .pytest_cache/
+.pytest_tmp/
 
 # Binary 3D Volumes & Preprocessed NPZ (Keep folder structure via .gitkeep, track light CSV/XLSX tables)
 data/raw/images/*
@@ -42,6 +43,9 @@ outputs/tables/*
 # TV4 week 1 generated fixtures and smoke-test outputs
 data/synthetic_tv4*/
 outputs/tv4_week1/
+outputs_old_week2/
+outputs_old_but_newer_than_current_old_week2/
+scratch/
 
 # IDE & OS files
 .vscode/
