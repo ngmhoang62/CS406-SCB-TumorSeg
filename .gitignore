@@ -45,6 +45,7 @@ data/synthetic_tv4*/
 outputs/tv4_week1/
 outputs_old_week2/
 outputs_old_but_newer_than_current_old_week2/
+scratch/
 
 # IDE & OS files
 .vscode/
