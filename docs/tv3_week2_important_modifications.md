@@ -45,8 +45,8 @@ Trong kiến trúc biểu diễn 3 kênh đầu vào $X \in \mathbb{R}^{3 \times
 Để chạy thử nghiệm hoặc kiểm tra kết quả, toàn bộ 1.480 file `.npz` dưới local cần được cập nhật kênh $C_3$ mới:
 
 > [!IMPORTANT]
-> **Link tải file nén 1.480 file `.npz` đã cập nhật $C_3$ CEHS:**  
-> 🔗 `[DÁN LINK GOOGLE DRIVE CỦA BẠN VÀO ĐÂY]` *(Kích thước ~5.6 GB)*
+> **Link tải file nén 1.480 file `.npz` đã cập nhật $C_3$ CEHS (`npz_96x96x96_c3_cehs_improvement.zip`):**  
+> 🔗 https://drive.google.com/file/d/1crXh_mHvlClzDXTrc5X_uTacaLu8uLjX/view?usp=sharing *(Kích thước ~6.07 GB)*
 
 #### Cách bố trí và giải nén chuẩn (Xác nhận nguyên lý đóng gói):
 
@@ -134,6 +134,15 @@ Thực nghiệm kiểm chứng chuẩn mực trên cùng tập dữ liệu MAMA-
 > [!TIP]
 > **Kết luận then chốt**:  
 > Ở Lần 3 mới nhất, kiến trúc FiLM tối ưu đã **lật ngược tình thế hoàn toàn**, vượt trội mô hình không dùng FiLM tới **$+0.98\%$ Best Dice** và **$+1.07\%$ Last-3 Dice**, đồng thời **chiến thắng áp đảo trên toàn bộ cả 4 phân nhóm bệnh sinh học**!
+
+> [!IMPORTANT]
+> **Link tải trọn bộ kết quả & checkpoint 3 lần chạy (`outputs_all_runs.zip`):**  
+> 🔗 https://drive.google.com/file/d/1oht0UkUlh82BqA2uOYkkdKttAMS6bhsu/view?usp=sharing *(Kích thước ~12.18 GB)*  
+> - **Nội dung bên trong**: Chứa đồng thời 3 thư mục tương ứng với 3 lần thử nghiệm:
+>   - `outputs_1st/`: Kết quả Lần 1 (trước đây là `outputs_old_week2/`).
+>   - `outputs_2nd/`: Kết quả Lần 2 (trước đây là `outputs_old_but_newer_than_current_old_week2/`).
+>   - `outputs_latest/`: Kết quả Lần 3 mới nhất (thư mục `outputs/` hiện tại).
+> - **Cách dùng**: Tải file zip đặt tại **thư mục gốc repository** (`SCB-TumorSeg/`) $\to$ chọn **Extract Here**. Cả 3 thư mục sẽ tự động được giải nén ngay tại thư mục gốc để đối chiếu, kiểm tra checkpoints và bảng biểu lịch sử huấn luyện. Cả 3 thư mục này đã được thêm vào `.gitignore` nên sẽ không gây xung đột Git.
 
 ---
 
