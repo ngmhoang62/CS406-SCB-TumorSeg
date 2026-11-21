@@ -1,129 +1,52 @@
-"""
-Step 5.1: Paper Baselines Helper (`B0.1 Traditional FTV Thresholding`) & Model Factory (`M1`, `M2`, `M3`).
-"""
+"""Three baseline backbones using one fixed input configuration per run."""
 
-from typing import Any, Dict, Sequence
-import numpy as np
-from scipy import ndimage
-import torch.nn as nn
+from src.datasets.mama_mia import IP_CHANNELS
+from .attention_unet3d import SCBAttentionUNet3D
+from .nnunet3d import NNUNet3D
+from .swin_unetr3d import SCBSwinUNETR3D
 
-from src.models.resunet3d import SCBResUNet3D
-from src.models.attention_unet3d import SCBAttentionUNet3D
-from src.models.swin_unetr3d import SCBSwinUNETR3D
+IP_MODE_TO_CHANNELS = {name: len(indices) for name, indices in IP_CHANNELS.items()}
+MODEL_VARIANTS = ("baseline", "dual-add", "dual-gated", "boundary")
 
 
-IP_MODE_TO_CHANNELS: Dict[str, int] = {
-    "IP1": 1,
-    "IP1_post1": 1,
-    "IP-1": 1,
-    "IP2": 1,
-    "IP2_sub": 1,
-    "IP-2": 1,
-    "IP3": 3,
-    "IP3_multi": 3,
-    "IP-3": 3,
-}
+def resolve_in_channels(ip_mode=None, in_channels=None):
+    if ip_mode is not None and ip_mode not in IP_MODE_TO_CHANNELS:
+        raise ValueError(f"Unknown input mode {ip_mode!r}")
+    expected = IP_MODE_TO_CHANNELS.get(ip_mode, 2)
+    if in_channels is not None and in_channels not in (1, 2):
+        raise ValueError("in_channels must be 1 or 2")
+    if ip_mode is not None and in_channels is not None and in_channels != expected:
+        raise ValueError("in_channels disagrees with ip_mode")
+    return expected if in_channels is None else in_channels
 
 
-def resolve_in_channels(ip_mode: str | None = None, in_channels: int | None = None) -> int:
-    """Resolve number of input channels (1 for IP-1/IP-2, 3 for IP-3)."""
-    if in_channels is not None:
-        if in_channels not in (1, 3):
-            raise ValueError(f"`in_channels` must be 1 or 3, got {in_channels}")
-        return in_channels
-    if ip_mode is not None:
-        if ip_mode not in IP_MODE_TO_CHANNELS:
-            raise ValueError(f"Unknown `ip_mode`: {ip_mode}. Expected one of {list(IP_MODE_TO_CHANNELS.keys())}")
-        return IP_MODE_TO_CHANNELS[ip_mode]
-    return 3
+def build_model(arch, in_channels=None, ip_mode=None, config=None, patch_size=(96, 96, 96),
+                variant="baseline"):
+    cfg = config or {}
+    channels = resolve_in_channels(ip_mode, in_channels)
+    key = arch.upper()
+    if variant not in MODEL_VARIANTS:
+        raise ValueError(f"Unknown model variant {variant!r}")
+    if variant != "baseline" and key != "M1":
+        raise ValueError("The improvement variants are implemented on M1")
+    if key == "M1":
+        fusion = {"dual-add": "add", "dual-gated": "gated"}.get(variant, "concat")
+        return NNUNet3D(channels, cfg.get("nnunet_features", (32, 64, 128, 256, 320, 320)),
+                        encoder_fusion=fusion, boundary_aux=variant == "boundary")
+    if key == "M2":
+        return SCBAttentionUNet3D(channels, cfg.get("attention_channels", (32, 64, 128, 256, 320)))
+    if key == "M3":
+        return SCBSwinUNETR3D(channels, cfg.get("swin_feature_size", 48),
+                             cfg.get("swin_use_checkpoint", True), patch_size)
+    raise ValueError("arch must be M1, M2 or M3")
 
 
-def build_model(
-    arch: str,
-    in_channels: int | None = None,
-    ip_mode: str | None = None,
-    use_film: bool = False,
-    num_subtypes: int = 4,
-    film_embed_dim: int = 128,
-    deep_supervision: bool = True,
-    resunet_channels: Sequence[int] = (32, 64, 128, 256, 320),
-    base_channels: Sequence[int] | None = None,
-    swin_feature_size: int = 48,
-    swin_use_checkpoint: bool = True,
-) -> nn.Module:
-    """
-    Unified factory for building any of the 18 training configurations:
-      - `arch`: 'M1' / 'resunet' | 'M2' / 'attention_unet' | 'M3' / 'swin_unetr'
-      - `in_channels` or `ip_mode`: 1 channel ('IP-1', 'IP-2') or 3 channels ('IP-3')
-      - `use_film`: False ('C0: Without FiLM') or True ('C1: With FiLM')
-      - `deep_supervision`: True (returns [P0, P1, P2] in train mode, P0 in eval mode)
-    """
-    c_in = resolve_in_channels(ip_mode=ip_mode, in_channels=in_channels)
-    arch_key = arch.strip().lower()
-    channels = tuple(base_channels) if base_channels is not None else tuple(resunet_channels)
-
-    if arch_key in ("m1", "resunet", "3d_resunet", "dynunet"):
-        return SCBResUNet3D(
-            in_channels=c_in,
-            out_channels=1,
-            channels=channels,
-            use_film=use_film,
-            num_subtypes=num_subtypes,
-            film_embed_dim=film_embed_dim,
-            deep_supervision=deep_supervision,
-        )
-    elif arch_key in ("m2", "attention_unet", "attunet", "3d_attention_unet"):
-        return SCBAttentionUNet3D(
-            in_channels=c_in,
-            out_channels=1,
-            channels=channels,
-            use_film=use_film,
-            num_subtypes=num_subtypes,
-            film_embed_dim=film_embed_dim,
-            deep_supervision=deep_supervision,
-        )
-    elif arch_key in ("m3", "swin_unetr", "swinunetr", "3d_swin_unetr"):
-        return SCBSwinUNETR3D(
-            in_channels=c_in,
-            out_channels=1,
-            feature_size=swin_feature_size,
-            use_checkpoint=swin_use_checkpoint,
-            use_film=use_film,
-            num_subtypes=num_subtypes,
-            film_embed_dim=film_embed_dim,
-            deep_supervision=deep_supervision,
-        )
-    else:
-        raise ValueError(
-            f"Unknown model architecture '{arch}'. Supported: "
-            "['M1'/'resunet', 'M2'/'attention_unet', 'M3'/'swin_unetr']."
-        )
-
-
-def compute_traditional_ftv_baseline(
-    c2_sub_zscore: np.ndarray,
-    c3_pe_zscore: np.ndarray,
-    pe_z_threshold: float = 1.0,
-    sub_z_threshold: float = 1.0,
-    apply_morphology: bool = True,
-) -> np.ndarray:
-    """
-    Baseline B0.1 — Traditional Functional Tumor Volume (FTV) intensity thresholding
-    on Subtraction (C2) and Percent Enhancement (C3) maps, with optional 3D morphological cleanup.
-    """
-    raw_mask = (c2_sub_zscore >= sub_z_threshold) & (c3_pe_zscore >= pe_z_threshold)
-    if not apply_morphology or not np.any(raw_mask):
-        return raw_mask.astype(np.uint8)
-
-    # Keep largest connected component and fill internal necrotic holes
-    struct = ndimage.generate_binary_structure(3, 3)
-    labeled, num_features = ndimage.label(raw_mask, structure=struct)
-    if num_features > 0:
-        counts = np.bincount(labeled.ravel())
-        counts[0] = 0
-        largest_label = int(np.argmax(counts))
-        cleaned = labeled == largest_label
-        cleaned = ndimage.binary_closing(cleaned, structure=ndimage.iterate_structure(struct, 2))
-        cleaned = ndimage.binary_fill_holes(cleaned)
-        return cleaned.astype(np.uint8)
-    return raw_mask.astype(np.uint8)
+def validate_patch_size(arch, patch_size, config=None):
+    cfg = config or {}
+    stages = {"M1": len(cfg.get("nnunet_features", [32, 64, 128, 256, 320, 320])),
+              "M2": len(cfg.get("attention_channels", [32, 64, 128, 256, 320]))}
+    divisor = 32 if arch == "M3" else 2 ** (stages[arch] - 1)
+    if len(patch_size) != 3 or any(n <= 0 or n % divisor for n in patch_size):
+        raise ValueError(f"{arch} patch dimensions must be positive multiples of {divisor}")
+    if all(n == divisor for n in patch_size):
+        raise ValueError(f"{arch} needs more than one spatial voxel at the bottleneck")

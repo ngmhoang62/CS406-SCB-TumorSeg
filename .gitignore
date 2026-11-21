@@ -22,6 +22,7 @@ data/raw/patient_info_files/*
 !data/raw/patient_info_files/.gitkeep
 data/processed/npz_96x96x96/*
 !data/processed/npz_96x96x96/.gitkeep
+data/processed/full_volume_v1/
 
 # Archives & Temporary Sessions
 *.zip
@@ -49,6 +50,10 @@ outputs_1st/
 outputs_2nd/
 outputs_latest/
 scratch/
+outputs/baseline/
+outputs/pytest_baseline/
+outputs/pytest_improvements/
+outputs/baseline_smoke/
 
 # IDE & OS files
 .vscode/

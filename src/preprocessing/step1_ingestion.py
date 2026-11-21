@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import Dict, Any, Tuple
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import train_test_split
 
 
 SUBTYPE_TO_ID: Dict[str, int] = {
@@ -87,6 +86,8 @@ def create_stratified_splits_and_weights(
     Create Stratified Train (85%) / Val (15%) split from official Train set based on
     (tumor_subtype, dataset), preserve official Test set, and compute class-balanced weights.
     """
+    from sklearn.model_selection import train_test_split
+
     df = clinical_df.copy()
     df["official_split"] = df["patient_id"].map(lambda pid: official_split_map.get(str(pid), "train"))
 
@@ -107,7 +108,7 @@ def create_stratified_splits_and_weights(
     train_idx, val_idx = train_test_split(
         train_val_df.index,
         test_size=val_ratio,
-         random_state=seed,
+        random_state=seed,
         stratify=stratify_col,
     )
 

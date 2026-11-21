@@ -1,173 +1,203 @@
-# SCB-TumorSeg: Subtype-Conditioned 3D Breast Tumor Segmentation Using DCE-MRI
+# SCB-TumorSeg
 
-> **Đề tài:** Phân đoạn khối u vú 3D có điều kiện hóa theo phân nhóm bệnh học sử dụng ảnh DCE-MRI  
-> **Môn học:** Xử lý ảnh và Ứng dụng (CS406)  
-> **Bộ dữ liệu gốc:** MAMA-MIA (*Nature Scientific Data*, 2025 — 1,506 ca DCE-MRI đa trung tâm; 1,480 ca hợp lệ có phân nhóm sinh học)  
-> **Đặc tả kỹ thuật 8 Steps:** [`docs/detailed_pipeline.md`](docs/detailed_pipeline.md)  
-> **Phân công công việc nhóm (4 tuần):** [`docs/task_assignment.md`](docs/task_assignment.md)
+Phân đoạn u vú 3D từ DCE-MRI, gồm baseline và hai cải tiến đầu tiên theo [plan của nhóm](docs/scb_tumorseg_image_preprocessing_plan.md) và [hình pipeline](docs/figures/scb_tumorseg_plan_infographic.png).
 
----
+## Bàn giao cho người chạy A100
 
-## 1. Cấu trúc Cây thư mục Dự án (Canonical Project Structure)
+Các lệnh dưới đây chạy từ thư mục gốc repo với Python 3.10–3.12. Môi trường GPU cần có PyTorch CUDA tương thích driver. Hướng dẫn chọn bản PyTorch nằm tại [trang cài đặt chính thức](https://pytorch.org/get-started/locally/).
 
-```text
-SCB-TumorSeg/
-├── configs/
-│   ├── default_config.yaml           # Cấu hình tổng thể chuẩn cho toàn bộ 8 Steps (paths: data/*)
-│   └── step3_config.json             # Cấu hình tham số Step 3 (Denoising, Clipping, 3-Channel Synthesis)
-├── data/
-│   ├── raw/                          # Dữ liệu gốc MAMA-MIA (.nii.gz bị ignore trên Git; giữ bảng .xlsx/.csv)
-│   │   ├── clinical_and_imaging_info.xlsx
-│   │   ├── preliminary_automatic_segmentations_quality_scores.csv
-│   │   └── train_test_splits.csv
-│   ├── processed/
-│   │   └── npz_96x96x96/             # 1,480 file {CASE_ID}.npz 3 kênh sau Step 2 & Step 3 (5.60 GB)
-│   └── splits/
-│       ├── splits_metadata.csv       # Metadata chuẩn hóa 1,480 ca (Train: 1,003 | Val: 177 | Test: 300)
-│       ├── auto_vs_expert_dice.csv   # Điểm Dice đối chiếu automatic mask vs expert mask
-│       └── missing_auto_mask_cases.txt
-├── docs/
-│   ├── detailed_pipeline.md          # Đặc tả kỹ thuật chi tiết Steps 1 -> 8
-│   ├── task_assignment.md            # Bảng phân công nhiệm vụ 4 thành viên theo 4 tuần
-│   ├── tv1_week1.md                  # Báo cáo Tuần 1 của TV1 (Step 1 & Step 2)
-│   ├── tv2_week1.md                  # Báo cáo Tuần 1 của TV2 (Step 3 & Thống kê QC 1,480 ca)
-│   ├── tv4_week1.md                  # Báo cáo Tuần 1 của TV4 (Step 6 Dataset, Loss & Trainer)
-│   ├── figures/                      # Hình ảnh trực quan hóa QC tiền xử lý & mẫu 3 kênh
-│   └── reports/tv2_step3/            # Báo cáo thống kê định lượng 3 kênh trên 1,480 ca (.json, .csv)
-├── notebooks/
-│   ├── colab_download_preprocess.ipynb      # [TV1] Notebook tải dữ liệu & chạy Step 1-2-3 trên Colab
-│   ├── colab_preprocess_from_drive.ipynb    # [TV1] Notebook tiền xử lý từ Google Drive & vẽ hình QC
-│   ├── TV2_colab_step3.ipynb                # [TV2] Notebook kiểm định & thống kê 3 kênh trên 1,480 ca
-│   ├── TV2_tao_VOI_va_3_kenh.ipynb          # [TV2] Notebook trích xuất VOI trung gian & tổng hợp 3 kênh
-│   └── TV4_Week1_Training_SmokeTest.ipynb   # [TV4] Notebook Smoke Test huấn luyện M1, M2, M3
-├── outputs/
-│   ├── checkpoints/                  # Trọng số mô hình (.pt)
-│   ├── logs/                         # Log quá trình huấn luyện
-│   ├── predictions/                  # Mặt nạ dự đoán 3D (P0 & P1)
-│   ├── figures/                      # Hình ảnh lát cắt 2D/3D & biểu đồ đánh giá
-│   └── tables/                       # Bảng tổng hợp thực nghiệm 39 cấu hình
-├── scripts/
-│   ├── run_step1_2_3_pipeline.py     # Pipeline chuẩn chạy liên hoàn Step 1 -> Step 2 -> Step 3
-│   ├── qc_npz_contract.py            # Kiểm tra nhanh cấu trúc 1,480 file .npz đa luồng
-│   ├── qc_splits_and_stats.py        # Thống kê phân bố tập chia và kích thước VOI
-│   ├── run_tv2_step3_qc.py           # Kiểm định chuyên sâu Step 3 & thống kê độ tương phản 3 kênh
-│   ├── export_step2_voi.py           # Tái tạo VOI trung gian sau Step 2 và đối chiếu mask
-│   └── verify_models_step4_5.py      # Kiểm thử kiến trúc M1, M2, M3 + MultiStageFiLM (Step 4 & 5)
-├── src/
-│   ├── preprocessing/                # Step 1 (Ingestion), Step 2 (Spatial VOI 96^3), Step 3 (3-Channel Proc)
-│   ├── datasets/                     # Step 3.3 & Step 6 (MAMA_MIA_Dataset, DataLoader, 3D Augmentation)
-│   ├── models/                       # Step 4 (MultiStageFiLM) & Step 5 (ResUNet3D, AttentionUNet3D, SwinUNETR3D)
-│   ├── losses/                       # Step 6 (Deep Supervision DiceBCELoss)
-│   ├── engine/                       # Step 6 (Trainer bf16 AMP, LinearWarmupCosineAnnealingLR)
-│   ├── postprocessing/               # Step 7 (P0 Raw, P1: 3D CCA + Morphological Closing + Hole Filling)
-│   ├── evaluation/                   # Step 8 (DSC, HD95, Recall, Precision, Statistical Tests)
-│   ├── visualization/                # Step 8 (2D/3D Contours & Visual Reports)
-│   └── utils/                        # Quản lý cấu hình YAML & cố định random seed
-└── tests/
-    ├── test_tv2_week1_step3.py       # Unit tests công thức toán học Step 3 & QC workflow (TV2)
-    ├── test_tv4_week1.py             # Unit tests Dataset, Deep Supervision Loss, Scheduler & Trainer (TV4)
-    └── test_week1_real_integration.py # Integration test liên thông TV1 + TV2 + TV3 + TV4 trên dữ liệu thật
-```
+### 1. Cài thư viện và kiểm tra luồng chạy
 
----
+~~~bash
+python -m pip install -r requirements.txt
+python -c "import torch; print(torch.__version__); print(torch.version.cuda); assert torch.cuda.is_available(); print(torch.cuda.get_device_name(0))"
+python -m pytest -q -rs
+python scripts/run_pipeline.py smoke-test --device cuda
+~~~
 
-## 2. Tổng kết Công việc Tuần 1 của 4 Thành viên
+smoke-test tự tạo NIfTI tổng hợp, chạy tiền xử lý, lấy patch train, forward/backward và một optimizer step, quét toàn ảnh rồi xuất/đọc lại mask NIfTI. Nó kiểm tra M1 với cả IP1/IP2/IP3, M2 và M3 với IP3. Số feature được giảm trong phép thử để kiểm tra luồng chạy nhanh. M1 vẫn có sáu tầng. Kết quả in tên GPU, trạng thái bf16 và từng cấu hình đã PASS. Dữ liệu tổng hợp nằm trong thư mục tạm và được dọn khi kết thúc.
 
-Trong Tuần 1, cả 4 thành viên đã hoàn thành 100% việc tiền xử lý toàn bộ **1,480 ca bệnh thực tế** của bộ dữ liệu MAMA-MIA và xây dựng xong toàn bộ khung kiến trúc **Steps 1 $\rightarrow$ 6**:
+### 2. Đặt dữ liệu và chỉnh đường dẫn
 
-### 2.1. Thành viên 1 (TV1) — Step 1 & Step 2: Lọc dữ liệu, Chia tập Stratified & Chuẩn hóa Không gian 3D VOI
-- **Báo cáo chi tiết:** [`docs/tv1_week1.md`](docs/tv1_week1.md)
-- **Mã nguồn chính:** [`src/preprocessing/step1_ingestion.py`](src/preprocessing/step1_ingestion.py), [`src/preprocessing/step2_spatial_voi.py`](src/preprocessing/step2_spatial_voi.py), [`scripts/qc_npz_contract.py`](scripts/qc_npz_contract.py), [`scripts/qc_splits_and_stats.py`](scripts/qc_splits_and_stats.py).
-- **Kết quả đạt được:**
-  - Lọc 26 ca thiếu thông tin phân nhóm (`N/A`) từ 1,506 ca gốc, giữ lại **1,480 ca hợp lệ** thuộc 4 phân nhóm chuẩn (`0: Luminal` — 747 ca, `1: Triple Negative` — 499 ca, `2: HER2-enriched` — 169 ca, `3: HER2-pure` — 65 ca).
-  - Bảo toàn tập `Test` chính thức của bài báo (**300 ca**) và chia Stratified 85% `Train` (**1,003 ca**) / 15% `Val` (**177 ca**) theo cặp `(tumor_subtype, dataset)`, đồng thời tính sẵn trọng số `sample_weight` tại [`data/splits/splits_metadata.csv`](data/splits/splits_metadata.csv).
-  - Chuẩn hóa hệ trục giải phẫu **RAS**, nội suy đẳng hướng $1.0 \times 1.0 \times 1.0\text{ mm}^3$ (`B-Spline` bậc 3 cho ảnh MRI, `Nearest-Neighbor` cho mặt nạ) và trích xuất cửa sổ VOI tốc độ cao (`_resample_window`) bao trọn khối u + $25\%$ lề với kích thước tối thiểu $96 \times 96 \times 96$ (giữ nguyên 307 ca có ít nhất một trục $> 96$ để không cắt mất mô u).
+~~~text
+data/raw/images/<CASE_ID>/<CASE_ID>_0000.nii.gz
+data/raw/images/<CASE_ID>/<CASE_ID>_0001.nii.gz
+data/raw/images/<CASE_ID>/<CASE_ID>_0002.nii.gz
+...
+data/raw/segmentations/expert/<CASE_ID>.nii.gz
+data/splits/splits_metadata.csv
+~~~
 
-### 2.2. Thành viên 2 (TV2) — Step 3: Xử lý Ảnh Đa Biểu diễn, Tổng hợp 3 Kênh & Kiểm định Chất lượng
-- **Báo cáo chi tiết:** [`docs/tv2_week1.md`](docs/tv2_week1.md) | **Số liệu QC:** [`docs/reports/tv2_step3/`](docs/reports/tv2_step3/) | **Hình mẫu 3 kênh:** [`docs/figures/tv2_step3_samples/`](docs/figures/tv2_step3_samples/)
-- **Mã nguồn chính:** [`src/preprocessing/step3_image_proc.py`](src/preprocessing/step3_image_proc.py), [`configs/step3_config.json`](configs/step3_config.json), [`scripts/run_tv2_step3_qc.py`](scripts/run_tv2_step3_qc.py), [`scripts/export_step2_voi.py`](scripts/export_step2_voi.py), [`tests/test_tv2_week1_step3.py`](tests/test_tv2_week1_step3.py).
-- **Kết quả đạt được:**
-  - Thực thi khử nhiễu giữ biên **3D Non-Local Means** (ước lượng phương sai nhiễu MAD tự động) và cắt ngưỡng phân vị cường độ $[P_{0.5}, P_{99.5}]$ trên vùng foreground ($I > 0$).
-  - Tổng hợp tensor 3 kênh `float16` $\mathbf{X} \in \mathbb{R}^{3 \times D \times H \times W}$ gồm:
-    1. **Kênh 0 ($C_1 = \hat{I}_{\text{post1}}$):** Ảnh pha sau tiêm đầu tiên chuẩn hóa Z-score.
-    2. **Kênh 1 ($C_2 = \hat{I}_{\text{sub}}$):** Ảnh trừ $\max(0, I_{\text{post1}} - I_{\text{pre}})$ chuẩn hóa Z-score nhằm triệt tiêu nền mô mỡ sáng trên T1.
-    3. **Kênh 2 ($C_3 = \hat{I}_{\text{PE+CLAHE}}$):** Bản đồ tỷ lệ ngấm thuốc $(I_{\text{post1}} - I_{\text{pre}}) / (I_{\text{pre}} + \tau)$ kết hợp cân bằng histogram cục bộ **3D CLAHE** và chuẩn hóa Z-score.
-  - Kiểm định tự động **1,480/1,480 file `.npz` hợp lệ 100%** (`missing: 0`, `invalid: 0`) và thống kê định lượng chứng minh kênh `Subtraction` nâng độ tương phản vùng u so với nền (`tumor_minus_bg`) từ `~3.2` lên **`~4.3`** trên toàn bộ 4 trung tâm (`DUKE`, `ISPY1`, `ISPY2`, `NACT`).
+Chỉnh paths trong [configs/default_config.yaml](configs/default_config.yaml) theo nơi đặt dữ liệu. File pha có thể nằm trực tiếp trong raw_images_dir hoặc trong thư mục từng ca. Discovery hỗ trợ tên ca viết hoa/thường. Hai pha bắt buộc là Pre (_0000) và Post1 (_0001). Các pha sau có sẵn của cùng ca góp vào thống kê z-score.
 
-### 2.3. Thành viên 3 (TV3) — Step 4 & Step 5: Điều kiện hóa Đa tầng Multi-Stage FiLM & 3 Kiến trúc Mạng 3D
-- **Mã nguồn chính:** [`src/models/film.py`](src/models/film.py), [`src/models/resunet3d.py`](src/models/resunet3d.py), [`src/models/attention_unet3d.py`](src/models/attention_unet3d.py), [`src/models/swin_unetr3d.py`](src/models/swin_unetr3d.py), [`src/models/factory.py`](src/models/factory.py), [`scripts/verify_models_step4_5.py`](scripts/verify_models_step4_5.py).
-- **Kết quả đạt được:**
-  - Thiết kế module [`MultiStageFiLM`](src/models/film.py) ánh xạ mã phân nhóm `subtype_id` $\in \{0, 1, 2, 3\}$ thành các cặp tham số điều biến $(\gamma^{(s)}, \beta^{(s)})$ ở 3 tầng sâu nhất (Stage 3, Stage 4, Stage 5/Bottleneck) với cơ chế **Zero-Initialization** ($\gamma^{(s)} = \mathbf{0}, \beta^{(s)} = \mathbf{0}$ ở epoch 0 để khởi đầu tương đương mô hình Unconditioned).
-  - Xây dựng hoàn chỉnh 3 kiến trúc phân đoạn 3D hỗ trợ bật/tắt `use_film`, tùy chọn số kênh đầu vào (`in_channels` $\in \{1, 2, 3\}$) và tích hợp **Deep Supervision** 3 mức phân giải ($\hat{Y}_1, \hat{Y}_2, \hat{Y}_3$):
-    - **`M1` (`ResUNet3D`):** Mạng U-Net 3D 5 tầng với khối Residual, InstanceNorm3d và LeakyReLU (`[32, 64, 128, 256, 320]`).
-    - **`M2` (`AttentionUNet3D`):** Tích hợp cổng chú ý không gian 3D (`AttentionGate3D`) tại các nhánh skip connection.
-    - **`M3` (`SwinUNETR3D`):** Kiến trúc lai 3D Swin Transformer – CNN với `feature_size=48` và `MultiStageFiLM` gắn tại các tầng đặc trưng sâu.
+Split đã chốt gồm 1.003 train, 177 validation và 300 test. Luồng mặc định dùng lại CSV này. Có thể tạo lại split từ Excel và split chính thức bằng cờ --rebuild-splits.
 
-### 2.4. Thành viên 4 (TV4) — Step 6: Dataset 3 Chế độ Kênh, Deep Supervision Loss & Training Engine
-- **Báo cáo chi tiết:** [`docs/tv4_week1.md`](docs/tv4_week1.md) | **Notebook Smoke Test:** [`notebooks/TV4_Week1_Training_SmokeTest.ipynb`](notebooks/TV4_Week1_Training_SmokeTest.ipynb)
-- **Mã nguồn chính:** [`src/datasets/mama_mia.py`](src/datasets/mama_mia.py), [`src/losses/dice_bce.py`](src/losses/dice_bce.py), [`src/engine/trainer.py`](src/engine/trainer.py), [`tests/test_tv4_week1.py`](tests/test_tv4_week1.py).
-- **Kết quả đạt được:**
-  - Xây dựng [`MAMA_MIA_Dataset`](src/datasets/mama_mia.py) trên nền `monai.data.CacheDataset` hỗ trợ trích xuất linh hoạt 3 cấu hình kênh (`IP1_post1` $\rightarrow [0]$, `IP2_sub` $\rightarrow [1]$, `IP3_multi` $\rightarrow [0, 1, 2]$) và chuỗi tăng cường dữ liệu 3D on-the-fly (`RandCropByPosNegLabeld`, `RandFlipd`, `RandRotate90d`, `RandAffined`, `RandGaussianNoised`, `RandScaleIntensityd`).
-  - Cài đặt hàm tổn thất đa tỷ lệ [`DiceBCELoss`](src/losses/dice_bce.py) kết hợp trọng số Deep Supervision $(w_1 = 1.0, w_2 = 0.5, w_3 = 0.25)$.
-  - Xây dựng [`Trainer`](src/engine/trainer.py) và bộ lập lịch [`LinearWarmupCosineAnnealingLR`](src/engine/trainer.py) hỗ trợ huấn luyện Mixed Precision (`bfloat16` AMP trên GPU CUDA và `float32` trên CPU), lưu trữ tự động `best.pt`, `last.pt` và `history.csv`.
+### 3. Tiền xử lý từ ảnh gốc
 
----
+~~~bash
+python scripts/run_pipeline.py preprocess
+~~~
 
-## 3. Quy ước Quản lý Nhánh Git & Đóng gói `.zip` cho các Tuần Tiếp theo
+Kết quả nằm ở data/processed/full_volume_v1. Mỗi file NPZ lưu hai kênh ảnh toàn trường nhìn, expert mask cùng lưới, spacing/origin/direction, thống kê chuẩn hóa và thông tin nguồn. manifest.json ghi các ca hoàn tất, lỗi và SHA-256 từng file kết quả. Chạy lại cùng lệnh để dùng lại các file hợp lệ và thử lại ca thất bại. Khi tiền xử lý lại làm thay đổi dữ liệu, chữ ký dataset cũng thay đổi để phân biệt với các checkpoint đã train.
 
-Để đảm bảo quá trình hợp nhất code và chia sẻ dữ liệu giữa 4 thành viên trong các tuần tiếp theo luôn sạch sẽ, thống nhất và không xảy ra xung đột:
+Bộ npz_96x96x96 trước đây lưu VOI ba kênh. Bộ full_volume_v1 được tạo từ NIfTI theo pipeline hiện tại. Loader kiểm tra contract_version trước khi đọc.
 
-1. **Giữ nguyên cấu trúc cây thư mục chuẩn trên Git:**
-   - Khi làm việc trên nhánh cá nhân (`TV1`, `TV2`, `TV3`, `TV4`), các thành viên thêm/sửa/xóa file trực tiếp trong các thư mục chuẩn (`src/`, `scripts/`, `notebooks/`, `tests/`, `docs/`, `configs/`).
-   - **Tuyệt đối không** tạo các thư mục con riêng lẻ theo tên cá nhân ở gốc dự án (như `TV1_Tuan2/`, `TV2_Tuan2/`, `tasks/`).
-2. **Quy tắc chia sẻ các file nặng nằm trong `.gitignore` (`data/processed/`, `outputs/checkpoints/`, `outputs/predictions/`, `outputs/logs/`):**
-   - Không commit các file nhị phân nặng (`.npz`, `.nii.gz`, `.pt`) lên Git.
-   - Khi cần bàn giao dữ liệu đã xử lý, trọng số mô hình (`.pt`), hoặc mặt nạ dự đoán (`outputs/predictions/`) cho thành viên khác: **Nén thành 1 file `.zip` tính từ thư mục gốc `SCB-TumorSeg/`** (sao cho đường dẫn bên trong file `.zip` giữ nguyên cấu trúc tương đối, ví dụ `data/processed/npz_96x96x96/...` hoặc `outputs/checkpoints/...`), tải lên Google Drive và cập nhật link tải vào `README.md`.
-   - Thành viên nhận chỉ cần tải file `.zip` về đặt ngay tại thư mục gốc `SCB-TumorSeg/` và giải nén tại chỗ (**Extract Here** hoặc `tar -xf <ten_file>.zip`) là toàn bộ file sẽ tự động nằm đúng vị trí trong cây thư mục local.
+### 4. So IP1/IP2/IP3 trên M1 và chọn bằng validation
 
----
+~~~bash
+python scripts/run_pipeline.py train --model M1 --ip IP1 --device cuda
+python scripts/run_pipeline.py train --model M1 --ip IP2 --device cuda
+python scripts/run_pipeline.py train --model M1 --ip IP3 --device cuda
+python scripts/run_pipeline.py select-input
+~~~
 
-## 4. Hướng dẫn Tái lập Môi trường & Chạy Kiểm thử (Reproducibility Guide)
+Mỗi run giữ nguyên loại đầu vào từ train đến validation/test. select-input kiểm tra ba run M1 đã hoàn tất, dùng cùng dữ liệu/cấu hình và chọn best validation Dice cao nhất. Nếu bằng điểm, thứ tự ưu tiên là IP1, IP2 rồi IP3. Kết quả nằm ở outputs/baseline/selected_input.json, kèm điểm ba cấu hình và hash checkpoint.
 
-### 4.1. Cài đặt Môi trường
-```bash
-# 1. Clone repository về máy
-git clone https://github.com/ngmhoang62/CS406-SCB-TumorSeg.git
-cd CS406-SCB-TumorSeg
+### 5. Giữ đầu vào đã chọn để so backbone
 
-# 2. Tạo và kích hoạt môi trường ảo Python (Python 3.10 - 3.12)
-python -m venv venv
-# Windows (PowerShell):
-.\venv\Scripts\Activate.ps1
-# Linux / macOS:
-source venv/bin/activate
+~~~bash
+python scripts/run_pipeline.py train --model M2 --ip selected --device cuda
+python scripts/run_pipeline.py train --model M3 --ip selected --device cuda
+~~~
 
-# 3. Cài đặt PyTorch (chọn bản CPU hoặc CUDA phù hợp với máy tại https://pytorch.org/)
-pip install torch
+M1 với đầu vào đã chọn được dùng lại từ bước 4. Mỗi thư mục outputs/baseline/<MODEL>_<IP> chứa best.pt, last.pt, history.csv và run_summary.json. best.pt được chọn bằng validation Dice trên toàn ảnh. Chạy lại lệnh train tương ứng để resume.
 
-# 4. Cài đặt toàn bộ thư viện phụ thuộc của dự án
-pip install -r requirements.txt
-```
+### 6. Chấm test và xuất kết quả
 
-### 4.2. Chuẩn bị Dữ liệu Tiền xử lý (`.npz` 1,480 Ca)
-- **Thư mục Google Drive chung của nhóm:** [Google Drive CS406-IPA](https://drive.google.com/drive/folders/1_R2FBnFZf3N0kXWirW1S9bpbid-Jt14M?usp=sharing)
-- **Bộ 1,480 file `.npz` đã qua Steps 1–3 (5.60 GB):** [Thư mục `npz_96x96x96` trên Google Drive](https://drive.google.com/drive/folders/19I0tvr5e0TiXq6oIGmd0bbI6JFaTmwaq?usp=sharing) — tải về và đặt tại `data/processed/npz_96x96x96/`.
-- **Bộ dữ liệu thô gốc `mama_mia_raw.zip` (87.8 GB, chỉ cần nếu muốn chạy lại từ Step 1):** [Tải `mama_mia_raw.zip`](https://drive.google.com/file/d/1fvhFojPeb1lm6tvi1hJHUSFyHR4qpsqz/view?usp=sharing) — đặt tại thư mục gốc `SCB-TumorSeg/` và giải nén (`tar -xf mama_mia_raw.zip`).
+~~~bash
+python scripts/run_pipeline.py evaluate --model M1 --ip selected --split test --device cuda
+python scripts/run_pipeline.py evaluate --model M2 --ip selected --split test --device cuda
+python scripts/run_pipeline.py evaluate --model M3 --ip selected --split test --device cuda
+~~~
 
-### 4.3. Chạy Kiểm định Dữ liệu & Kiểm thử Liên thông Toàn Pipeline (Steps 1 $\rightarrow$ 6)
-```bash
-# 1. Kiểm tra tính toàn vẹn Data Contract trên toàn bộ 1,480 file .npz (Step 1 & 2 - TV1)
-python scripts/qc_npz_contract.py --data-root data --threads 16
+Test yêu cầu run đã hoàn tất. So ba backbone dùng đầu vào được chọn bằng validation. Với các thí nghiệm M1, có thể chỉ rõ IP để chấm baseline và cải tiến trên cùng loại đầu vào. Kiến trúc, patch, overlap và ngưỡng được đọc từ checkpoint. evaluation_config.json khóa hash checkpoint và cấu hình của lần chấm.
 
-# 2. Chạy bộ Unit Tests kiểm chứng thuật toán 3 kênh & QC workflow (Step 3 - TV2)
-pytest -q tests/test_tv2_week1_step3.py
+| File trong thư mục từng run/test | Nội dung |
+| --- | --- |
+| <CASE_ID>_prob.nii.gz | Bản đồ xác suất u toàn trường nhìn Post1 |
+| <CASE_ID>_mask.nii.gz | Mask nhị phân thô trên lưới 1 mm |
+| metrics.csv | Dice và HD95 từng ca |
+| metrics_by_cohort.csv | Trung bình theo cohort và số ca |
+| evaluation_config.json | Checkpoint và cấu hình đã dùng |
 
-# 3. Kiểm thử kiến trúc M1, M2, M3 & MultiStageFiLM Zero-Init / Deep Supervision (Step 4 & 5 - TV3)
-python scripts/verify_models_step4_5.py
+Cả probability và mask giữ spacing/origin/direction của lưới Post1 sau resample.
 
-# 4. Chạy bộ Unit Tests cho Dataset, Deep Supervision Loss & Trainer (Step 6 - TV4)
-pytest -q tests/test_tv4_week1.py
+## Đối chiếu với hình pipeline
 
-# 5. Chạy Kiểm thử Tích hợp Liên thông (TV1 + TV2 + TV3 + TV4) trực tiếp trên dữ liệu thật .npz
-python tests/test_week1_real_integration.py
-```
+| Bước | Source hiện tại |
+| --- | --- |
+| Pre, Post1 và các pha sau | preprocess_case đọc các pha đánh số, bắt buộc có Pre và Post1 |
+| RAS | SimpleITK DICOMOrient |
+| Resample 1 mm toàn ảnh | Lưới tham chiếu phủ toàn Post1, nội suy tuyến tính cho ảnh |
+| Expert mask cùng lưới | Resample nearest-neighbor trên đúng lưới Post1 |
+| Z-score chung | Một cặp mean/std từ toàn bộ voxel của tất cả các pha đã resample |
+| IP1 | C1 = Z(Post1), một kênh |
+| IP2 | C2 = Z(Post1) − Z(Pre), giữ dấu, một kênh |
+| IP3 | Ghép [C1, C2], hai kênh |
+| Train | Patch 3D, mask hỗ trợ lấy tâm patch ở vùng u hoặc nền và làm nhãn học |
+| Validation/test | Sliding window toàn trường nhìn, ghép logits Gaussian, mask dùng để chấm |
+| Chọn đầu vào rồi so backbone | Ba run M1 → select-input → M2/M3 với --ip selected |
+| M1 | PlainConvUNet sáu tầng của thư viện dùng trong nnU-Net v2 |
+| M2 | MONAI Attention U-Net 3D, attention gate tại skip connections |
+| M3 | MONAI Swin UNETR, encoder Swin và decoder tích chập |
+| Đầu ra tạm | Một đầu dự đoán chính → xác suất → ngưỡng nhị phân → Dice/HD95 |
+
+Mốc triển khai gồm baseline đến mask thô, hai encoder cho IP3 và đầu phụ dự đoán biên u. Plan còn mô tả các bước cSE, ngữ cảnh toàn ảnh và metadata cho giai đoạn tiếp theo.
+
+## Hai cải tiến đầu tiên trên M1
+
+Các thí nghiệm dưới đây dùng lại full_volume_v1 và cùng split. Mỗi cải tiến được train thành một run riêng, với M1 + IP3 baseline làm đối chứng.
+
+| --variant | Cấu trúc |
+| --- | --- |
+| baseline | Ghép hai kênh IP3 tại đầu vào, một encoder PlainConvUNet |
+| dual-add | Hai encoder sáu tầng độc lập cho Post1 và subtraction, cộng feature maps cùng mức, một decoder chung |
+| dual-gated | Hai encoder như dual-add, học hai trọng số theo vị trí ở mỗi mức rồi cộng có trọng số |
+| boundary | Encoder baseline, đầu phân đoạn chính và đầu biên 1×1×1 sau block decoder cuối |
+
+Ở dual-gated, hai trọng số được tạo bằng Conv3d 1×1×1 và softmax theo nhánh. F = w_Post1 × F_Post1 + w_sub × F_sub, với tổng hai trọng số bằng 1. Cổng được khởi tạo ở mức 0.5 cho mỗi nhánh. Fusion diễn ra tại các skip và bottleneck.
+
+Ở boundary, nhãn biên là morphological gradient từ expert mask toàn ảnh trên lưới 1 mm. Kernel 3×3×3 mặc định tạo một dải cả phía trong và phía ngoài biên u. Nhãn được tạo trước khi cắt patch, rồi crop/flip/rotate đồng bộ với ảnh và mask. Viền scan được xử lý bằng giá trị lân cận để tránh tạo biên do giới hạn ảnh.
+
+L_train = DiceBCE(mask) + λ × DiceBCE(boundary). Giá trị khởi đầu λ = 0.2 và radius = 1 voxel có thể chỉnh bằng --boundary-weight và --boundary-radius. Validation loss, Dice và HD95 dùng đầu phân đoạn chính. Model ở chế độ eval trả tensor phân đoạn chính, và đầu biên được gọi trong chế độ train.
+
+### Kiểm tra và train riêng từng cải tiến
+
+~~~bash
+python scripts/run_pipeline.py smoke-test --device cuda --improvements
+python scripts/run_pipeline.py train --model M1 --ip IP3 --variant dual-add --device cuda
+python scripts/run_pipeline.py train --model M1 --ip IP3 --variant dual-gated --device cuda
+python scripts/run_pipeline.py train --model M1 --ip IP3 --variant boundary --boundary-weight 0.2 --boundary-radius 1 --device cuda
+~~~
+
+### Chấm cùng IP3 và cùng tập test
+
+~~~bash
+python scripts/run_pipeline.py evaluate --model M1 --ip IP3 --variant baseline --split test --device cuda
+python scripts/run_pipeline.py evaluate --model M1 --ip IP3 --variant dual-add --split test --device cuda
+python scripts/run_pipeline.py evaluate --model M1 --ip IP3 --variant dual-gated --split test --device cuda
+python scripts/run_pipeline.py evaluate --model M1 --ip IP3 --variant boundary --split test --device cuda
+~~~
+
+Chọn cấu hình và checkpoint bằng validation trước khi chấm test. Các run có tên M1_IP3, M1_IP3_dual-add, M1_IP3_dual-gated và M1_IP3_boundary. Variant, hệ số loss biên và radius được lưu trong checkpoint, hỗ trợ resume và dựng lại model khi evaluate/infer. Thay đổi hệ số hoặc radius của một run đã có yêu cầu outputs_dir riêng như các thay đổi cấu hình thực nghiệm khác.
+
+Suy luận một ca từ run cải tiến bằng cùng tham số --variant.
+
+~~~bash
+python scripts/run_pipeline.py infer --model M1 --ip IP3 --variant boundary --case data/processed/full_volume_v1/DUKE_001.npz --output outputs/baseline/predict_boundary_DUKE_001 --device cuda
+~~~
+
+## Các lựa chọn triển khai
+
+- M1 có sáu tầng [32, 64, 128, 256, 320, 320], hai convolution mỗi tầng, stride 2 giữa các tầng, khởi tạo He theo PlainConvUNet.
+- Ba model dùng trainer chung của nhóm với AdamW, warmup/cosine, Dice+BCE và một đầu ra nhị phân. Khi báo cáo, mô tả M1 là backbone PlainConvUNet từ nnU-Net v2 với giao thức train này.
+- Mean/std được tính trên toàn bộ voxel của các pha đã resample, gồm nền và vùng đệm ngoài ảnh. Expert mask được xử lý riêng với các kênh ảnh.
+- Validation/test ghép toàn scan trên RAM, các cửa sổ được xử lý trên GPU. Cách bố trí này giới hạn lượng dữ liệu toàn ảnh phải giữ trong VRAM.
+- Patch 96³, batch_size 2, một patch mỗi ca, tỷ lệ tâm patch ở vùng u 0.5, overlap 0.5 và 120 epoch là cấu hình khởi đầu trong YAML. Các tham số này có thể hiệu chỉnh theo dữ liệu, VRAM và validation.
+- Batch đưa vào model có batch_size × patches_per_case patch. Cache mặc định 0 để tải từng ca. num_workers có thể chỉnh theo CPU/RAM của máy chạy.
+- Threshold mặc định 0.5, được dùng nhất quán để chấm validation, chọn checkpoint và tạo mask khi test.
+
+Các thí nghiệm độc lập có thể dùng một bản YAML riêng. Mọi đường dẫn tương đối được tính từ thư mục gốc repo. Truyền --config trước tên lệnh.
+
+~~~bash
+python scripts/run_pipeline.py --config configs/default_config.yaml train --model M1 --ip IP1 --device cuda
+~~~
+
+Resume yêu cầu cấu hình khớp checkpoint. Đặt outputs_dir mới cho một bộ cấu hình khác để giữ riêng kết quả thực nghiệm.
+
+## Suy luận một ca
+
+~~~bash
+python scripts/run_pipeline.py infer --model M1 --ip selected --case data/processed/full_volume_v1/DUKE_001.npz --output outputs/baseline/predict_DUKE_001 --device cuda
+~~~
+
+Loader suy luận đọc ảnh và hình học. Có thể tạo NPZ của ca mới bằng preprocess_case với expert_path=None rồi save_case. Khi chuyển riêng một run sang máy khác, chỉ rõ IP1, IP2 hoặc IP3 theo checkpoint.
+
+## Chỉ số và quy ước
+
+Dice tính trên mask nhị phân toàn ảnh. HD95 dùng khoảng cách bề mặt vật lý theo mm và lấy giá trị lớn hơn giữa hai phân vị 95% có hướng. Khi cả hai mask rỗng, Dice=1 và HD95=0. Khi chỉ một mask rỗng, Dice=0 và HD95=inf. Giá trị inf được giữ trong CSV và thống kê.
+
+## Cấu trúc chính
+
+| Đường dẫn | Nội dung |
+| --- | --- |
+| configs/default_config.yaml | Đường dẫn và tham số |
+| scripts/run_pipeline.py | Entry point cho smoke-test, preprocess, train, select-input, evaluate, infer |
+| scripts/smoke_baseline.py | Phép thử tổng hợp trên CPU/CUDA |
+| src/preprocessing/ | Chia tập và tiền xử lý toàn ảnh |
+| src/datasets/ | Đọc dữ liệu và lấy patch train |
+| src/models/ | M1, M2, M3 và factory |
+| src/engine/ | Train, checkpoint và sliding-window inference |
+| src/evaluation/metrics.py | Dice và HD95 |
+| tests/test_baseline.py | Kiểm thử baseline và giao thức thực nghiệm |
+| tests/test_improvements.py | Hai encoder, nhãn/loss biên, train/resume và đánh giá các variant |
+| legacy/ | Script, notebook, cấu hình và báo cáo của các vòng trước |
+| MAMA-MIA/ | Mã nguồn tham khảo từ MAMA-MIA |
+
+## Trạng thái kiểm chứng tại máy sửa source
+
+Ngày 21/11/2026, 46 kiểm thử CPU đã đạt, bao gồm công thức chuẩn hóa, chọn kênh, patch train, toàn trường nhìn ở validation/test, sliding window, checkpoint/resume, chọn IP, khóa test và các chỉ số. M1 đã qua forward/backward với dynamic-network-architectures 0.3.1 và sáu tầng. M2 đã qua train/validation/resume cùng các entry point train/evaluate. M3 đã qua forward/backward.
+
+Hai encoder đã được kiểm tra tham số độc lập và gradient ở cả hai nhánh. Nhãn biên đã được kiểm tra vị trí trước/sau crop và augmentation. Đầu biên có gradient khi train, trong khi forward ở chế độ eval và sliding window trả đầu phân đoạn chính. Cả ba variant dual-add, dual-gated và boundary đã qua train, resume, nạp checkpoint và entry point evaluate trên dữ liệu tổng hợp.
+
+Máy sửa source còn thiếu SimpleITK, dữ liệu NIfTI thật và CUDA. Kiểm thử hình học NIfTI và phép thử đầy đủ smoke-test còn chờ môi trường có các thành phần đó. Người chạy A100 có thể dùng các lệnh ở bước 1 để kiểm tra ngay trên môi trường thực thi.

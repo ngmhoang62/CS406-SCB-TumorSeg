@@ -1,4 +1,4 @@
-"""TV4 week 1: cached NPZ volumes and paired, on-the-fly 3D augmentation."""
+"""Versioned full-volume NPZ data with training-only patch sampling."""
 
 from pathlib import Path
 
@@ -6,66 +6,66 @@ import numpy as np
 import pandas as pd
 import torch
 from monai.data import CacheDataset, DataLoader
-from torch.utils.data import WeightedRandomSampler
 from monai.transforms import (
-    Compose, MapTransform, RandFlipd, RandRotate90d, RandScaleIntensityd,
-    RandSpatialCropd, SpatialPadd,
+    Compose, MapTransform, RandCropByPosNegLabeld, RandFlipd, RandRotate90d,
+    RandScaleIntensityd, SpatialPadd,
 )
 
-IP_CHANNELS = {"IP1_post1": [0], "IP2_sub": [1], "IP3_multi": [0, 1, 2]}
-REQUIRED_COLUMNS = {"patient_id", "dataset", "tumor_subtype", "subtype_id", "split", "sample_weight"}
+from src.preprocessing.full_volume import CONTRACT_VERSION
+from .boundary import boundary_from_mask
+
+IP_CHANNELS = {
+    "IP1": [0], "IP2": [1], "IP3": [0, 1],
+    "IP1_post1": [0], "IP2_sub": [1], "IP3_multi": [0, 1],
+}
 
 
 class LoadNPZd(MapTransform):
-    """Deterministic loading is cached; random transforms run after cache lookup."""
-
-    def __init__(self, ip_mode):
+    def __init__(self, ip_mode, require_mask=True, boundary_radius=None):
         super().__init__(["npz_path"])
         if ip_mode not in IP_CHANNELS:
-            raise ValueError(f"Unknown ip_mode {ip_mode!r}; choose {tuple(IP_CHANNELS)}")
+            raise ValueError(f"Unknown ip_mode {ip_mode!r}")
         self.channels = IP_CHANNELS[ip_mode]
+        self.require_mask = require_mask
+        self.boundary_radius = boundary_radius
 
     def __call__(self, item):
         result = dict(item)
         path = result.pop("npz_path")
         with np.load(path, allow_pickle=False) as data:
-            required = {"image", "mask", "auto_mask", "subtype_id"}
-            if not required.issubset(data.files):
-                raise ValueError(f"{path}: missing keys {required - set(data.files)}")
-            image = data["image"].astype(np.float32)
-            mask = data["mask"]
-            if image.ndim != 4 or image.shape[0] != 3:
-                raise ValueError(f"{path}: expected image (3,D,H,W), got {image.shape}")
-            if mask.shape != (1, *image.shape[1:]) or data["auto_mask"].shape != mask.shape:
-                raise ValueError(f"{path}: image/mask/auto_mask shape mismatch")
-            if not np.isfinite(image).all() or not np.isin(mask, [0, 1]).all():
-                raise ValueError(f"{path}: image must be finite and mask binary")
-            subtype = int(data["subtype_id"].item())
-            if subtype not in range(4) or subtype != int(result["subtype_id"]):
-                raise ValueError(f"{path}: invalid subtype or disagreement with metadata")
-            result["image"] = torch.from_numpy(image[self.channels].copy())
-            result["mask"] = torch.from_numpy(mask.astype(np.float32))
-            result["subtype_id"] = torch.tensor(subtype, dtype=torch.long)
+            if "contract_version" not in data or str(data["contract_version"]) != CONTRACT_VERSION:
+                raise ValueError(f"{path}: regenerate this case using full-volume preprocessing")
+            image = data["image"]
+            if image.ndim != 4 or image.shape[0] != 2 or not np.isfinite(image).all():
+                raise ValueError(f"{path}: expected a finite image (2,D,H,W)")
+            result["image"] = torch.from_numpy(image[self.channels].astype(np.float32))
+            if self.require_mask:
+                mask = data["mask"]
+                if mask.shape != (1, *image.shape[1:]) or not np.isin(mask, [0, 1]).all():
+                    raise ValueError(f"{path}: mask must be binary and aligned with the image")
+                result["mask"] = torch.from_numpy(mask.astype(np.float32))
+                if self.boundary_radius is not None:
+                    boundary = boundary_from_mask(mask, self.boundary_radius)
+                    result["boundary"] = torch.from_numpy(boundary.astype(np.float32))
         return result
 
 
 class MAMA_MIA_Dataset(CacheDataset):
-    """Read the team NPZ contract. Validation/test retain the entire VOI.
+    """Training draws positive/background patches. Val/test keep the full scan."""
 
-    ``patch_size`` affects training only. Real training normally uses 96^3;
-    the notebook uses smaller patches for a CPU smoke test. Cache stores only
-    deterministic work, so repeated training accesses draw new augmentations.
-    """
-
-    def __init__(self, metadata_csv, npz_dir, split="train", ip_mode="IP3_multi",
-                 patch_size=(96, 96, 96), augment=True, cache_rate=1.0, seed=42):
+    def __init__(self, metadata_csv, npz_dir, split="train", ip_mode="IP3",
+                 patch_size=(96, 96, 96), augment=True, cache_rate=0.0, seed=42,
+                 positive_patch_probability=0.5, patches_per_case=2,
+                 boundary_aux=False, boundary_radius=1):
         if split not in {"train", "val", "test"}:
             raise ValueError("split must be train, val or test")
+        if not 0 <= positive_patch_probability <= 1 or patches_per_case < 1:
+            raise ValueError("Invalid patch sampling parameters")
         frame = pd.read_csv(metadata_csv)
-        if not REQUIRED_COLUMNS.issubset(frame.columns):
-            raise ValueError(f"Missing metadata columns: {REQUIRED_COLUMNS - set(frame.columns)}")
-        if frame.patient_id.duplicated().any():
-            raise ValueError("patient_id must be unique across splits (avoid leakage)")
+        if not {"patient_id", "split"}.issubset(frame.columns):
+            raise ValueError("Metadata requires patient_id and split")
+        if frame.patient_id.isna().any() or frame.patient_id.duplicated().any():
+            raise ValueError("patient_id must be present and unique across splits")
         if not frame.split.isin(["train", "val", "test"]).all():
             raise ValueError("Invalid split in metadata")
         frame = frame.loc[frame.split == split].reset_index(drop=True)
@@ -76,74 +76,62 @@ class MAMA_MIA_Dataset(CacheDataset):
             path = Path(npz_dir) / f"{row['patient_id']}.npz"
             if not path.is_file():
                 raise FileNotFoundError(path)
-            records.append({**row, "npz_path": str(path)})
-        transforms = [LoadNPZd(ip_mode)]
+            # Clinical columns may mix strings and missing values. The baseline
+            # collates only identifiers, images and labels.
+            records.append({"patient_id": str(row["patient_id"]),
+                            "dataset": str(row.get("dataset", "unknown")),
+                            "npz_path": str(path)})
+        use_boundary = boundary_aux and split == "train"
+        transforms = [LoadNPZd(ip_mode, boundary_radius=boundary_radius if use_boundary else None)]
         if split == "train":
+            if patch_size is None or len(patch_size) != 3 or min(patch_size) < 1:
+                raise ValueError("Training patch_size must contain three positive sizes")
             keys = ["image", "mask"]
-            if patch_size is not None:
-                if len(patch_size) != 3 or min(patch_size) < 1:
-                    raise ValueError("patch_size must contain 3 positive sizes")
-                transforms += [SpatialPadd(keys, spatial_size=patch_size),
-                               RandSpatialCropd(keys, roi_size=patch_size, random_size=False)]
+            if use_boundary:
+                keys.append("boundary")
+            transforms += [
+                SpatialPadd(keys, spatial_size=patch_size),
+                RandCropByPosNegLabeld(
+                    keys, label_key="mask", spatial_size=patch_size,
+                    pos=positive_patch_probability, neg=1 - positive_patch_probability,
+                    num_samples=patches_per_case,
+                ),
+            ]
             if augment:
                 transforms += [RandFlipd(keys, prob=0.5, spatial_axis=axis) for axis in range(3)]
-                # Rotate the two equal axes so non-cubic smoke patches stay batchable.
-                planes = (0, 1) if patch_size is None else next(
-                    ((a, b) for a, b in [(0, 1), (0, 2), (1, 2)]
-                     if patch_size[a] == patch_size[b]), None)
+                planes = next(((a, b) for a, b in [(0, 1), (0, 2), (1, 2)]
+                               if patch_size[a] == patch_size[b]), None)
                 if planes is not None:
-                    transforms.append(RandRotate90d(keys, prob=0.3, max_k=3, spatial_axes=planes))
+                    transforms.append(RandRotate90d(keys, prob=0.3, spatial_axes=planes))
                 transforms.append(RandScaleIntensityd(["image"], factors=0.1, prob=0.5))
         transform = Compose(transforms)
         transform.set_random_state(seed=seed)
-        super().__init__(records, transform=transform, cache_rate=cache_rate,
-                         num_workers=1, progress=False, copy_cache=True)
+        super().__init__(records, transform, cache_rate=cache_rate, num_workers=1,
+                         progress=False, copy_cache=True)
         self.metadata = frame
 
 
-def build_loaders(metadata_csv, npz_dir, ip_mode="IP3_multi", batch_size=2,
-                  patch_size=(96, 96, 96), num_workers=0, cache_rate=1.0, seed=42,
-                  use_weighted_sampler=True, sampler_power=0.5):
-    """Use num_workers=0 in Windows notebooks; val batch=1 handles variable VOIs."""
+def build_loaders(metadata_csv, npz_dir, ip_mode="IP3", batch_size=2,
+                  patch_size=(96, 96, 96), num_workers=0, cache_rate=0.0, seed=42,
+                  positive_patch_probability=0.5, patches_per_case=2,
+                  boundary_aux=False, boundary_radius=1):
     datasets = {
-        split: MAMA_MIA_Dataset(metadata_csv, npz_dir, split, ip_mode,
-                               patch_size=patch_size, cache_rate=cache_rate, seed=seed)
+        split: MAMA_MIA_Dataset(
+            metadata_csv, npz_dir, split, ip_mode, patch_size=patch_size,
+            cache_rate=cache_rate, seed=seed,
+            positive_patch_probability=positive_patch_probability,
+            patches_per_case=patches_per_case,
+            boundary_aux=boundary_aux, boundary_radius=boundary_radius,
+        )
         for split in ("train", "val")
     }
-    loaders = {}
-    use_pw = bool(num_workers and int(num_workers) > 0)
-    for split, dataset in datasets.items():
-        generator = torch.Generator().manual_seed(seed)
-        if split == "train" and use_weighted_sampler and "sample_weight" in dataset.metadata.columns:
-            raw_w = dataset.metadata["sample_weight"].to_numpy(dtype=np.float64)
-            weights = torch.as_tensor(
-                np.power(np.clip(raw_w, 1e-8, None), float(sampler_power)),
-                dtype=torch.double,
-            )
-            sampler = WeightedRandomSampler(
-                weights=weights,
-                num_samples=len(weights),
-                replacement=True,
-                generator=generator,
-            )
-            loaders[split] = DataLoader(
-                dataset,
-                batch_size=batch_size,
-                shuffle=False,
-                sampler=sampler,
-                num_workers=num_workers,
-                pin_memory=torch.cuda.is_available(),
-                persistent_workers=use_pw,
-                generator=generator,
-            )
-        else:
-            loaders[split] = DataLoader(
-                dataset,
-                batch_size=batch_size if split == "train" else 1,
-                shuffle=(split == "train"),
-                num_workers=num_workers,
-                pin_memory=torch.cuda.is_available(),
-                persistent_workers=use_pw,
-                generator=generator,
-            )
-    return loaders
+    return {
+        split: DataLoader(
+            dataset, batch_size=batch_size if split == "train" else 1,
+            shuffle=split == "train", num_workers=num_workers,
+            pin_memory=torch.cuda.is_available(),
+            persistent_workers=num_workers > 0,
+            generator=torch.Generator().manual_seed(seed),
+        )
+        for split, dataset in datasets.items()
+    }
